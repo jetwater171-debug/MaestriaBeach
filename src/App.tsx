@@ -36,6 +36,44 @@ import { KitchenPanel } from './components/KitchenPanel';
 import { CashierPanel } from './components/CashierPanel';
 import { Sparkles, RefreshCw, Database } from 'lucide-react';
 
+const hexToRgb = (hex: string): string => {
+  hex = hex.replace(/^#/, '');
+  if (hex.length === 3) {
+    hex = hex.split('').map(char => char + char).join('');
+  }
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+  return `${r}, ${g}, ${b}`;
+};
+
+const adjustColorBrightness = (hex: string, percent: number): string => {
+  hex = hex.replace(/^#/, '');
+  if (hex.length === 3) {
+    hex = hex.split('').map(char => char + char).join('');
+  }
+  let R = parseInt(hex.substring(0, 2), 16);
+  let G = parseInt(hex.substring(2, 4), 16);
+  let B = parseInt(hex.substring(4, 6), 16);
+
+  if (percent > 0) {
+    R = Math.min(255, Math.max(0, Math.round(R + (255 - R) * (percent / 100))));
+    G = Math.min(255, Math.max(0, Math.round(G + (255 - G) * (percent / 100))));
+    B = Math.min(255, Math.max(0, Math.round(B + (255 - B) * (percent / 100))));
+  } else {
+    const factor = (100 + percent) / 100;
+    R = Math.round(R * factor);
+    G = Math.round(G * factor);
+    B = Math.round(B * factor);
+  }
+
+  const rHex = R.toString(16).padStart(2, '0');
+  const gHex = G.toString(16).padStart(2, '0');
+  const bHex = B.toString(16).padStart(2, '0');
+
+  return `#${rHex}${gHex}${bHex}`;
+};
+
 function App() {
   // Estados principais
   const [storeInfo, setStoreInfo] = useState<StoreInfo>(() => getStoreInfo());
@@ -384,8 +422,22 @@ function App() {
     }
   };
 
+  const isHexColor = storeInfo.themeColor?.startsWith('#');
+  const themeClass = isHexColor ? 'theme-custom' : `theme-${storeInfo.themeColor || 'teal'}`;
+
   return (
-    <div className={"theme-" + (storeInfo.themeColor || 'teal')}>
+    <div className={themeClass}>
+      {isHexColor && (
+        <style dangerouslySetInnerHTML={{ __html: `
+          .theme-custom {
+            --primary: ${storeInfo.themeColor};
+            --primary-rgb: ${hexToRgb(storeInfo.themeColor!)};
+            --primary-dark: ${adjustColorBrightness(storeInfo.themeColor!, -15)};
+            --primary-light: ${adjustColorBrightness(storeInfo.themeColor!, 85)};
+            --border-focus: ${storeInfo.themeColor};
+          }
+        `}} />
+      )}
       {/* Barra de Simulação do Demo */}
       {currentRole !== 'login' && (
         <div style={{

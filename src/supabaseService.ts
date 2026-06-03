@@ -94,6 +94,126 @@ export const registerNewStore = async (
   }
 };
 
+// 1b. Cadastrar nova barraca de praia com dados estendidos (Onboarding Completo)
+export const registerNewStoreExtended = async (
+  storeDataInput: Omit<StoreInfo, 'tenantCode'> & { tenantCode: string },
+  ownerEmail: string,
+  ownerPasswordStr: string,
+  employeesInput: Omit<Employee, 'id'>[],
+  menuItemsInput: Omit<MenuItem, 'id'>[]
+): Promise<{ store: StoreInfo; employee: Employee; storeId: string } | null> => {
+  if (!checkSupabase()) return null;
+
+  try {
+    // 1. Inserir a loja
+    const { data: storeData, error: storeError } = await supabase!
+      .from('stores')
+      .insert([{
+        name: storeDataInput.name,
+        tenant_code: storeDataInput.tenantCode.toUpperCase().trim(),
+        owner_email: ownerEmail.toLowerCase().trim(),
+        owner_password: ownerPasswordStr,
+        tables_count: storeDataInput.tablesCount || 15,
+        service_charge_percent: storeDataInput.serviceChargePercent || 10.00,
+        logo_url: storeDataInput.logoUrl || '🏖️',
+        address: storeDataInput.address || '',
+        phone: storeDataInput.phone || '',
+        theme_color: storeDataInput.themeColor || 'teal',
+        categories: storeDataInput.categories || ['Bebidas', 'Petiscos', 'Sobremesas']
+      }])
+      .select()
+      .single();
+
+    if (storeError) {
+      console.error('Erro ao cadastrar barraca no Supabase (Onboarding):', storeError);
+      throw new Error(storeError.message.includes('unique') ? 'Este código de barraca ou e-mail já está sendo usado.' : storeError.message);
+    }
+
+    const storeId = storeData.id;
+
+    // 2. Inserir funcionários
+    const formattedEmployees = [
+      {
+        store_id: storeId,
+        name: 'Dono (Administrador)',
+        role: 'cashier',
+        pin: '0000'
+      },
+      ...employeesInput.map(emp => ({
+        store_id: storeId,
+        name: emp.name,
+        role: emp.role,
+        pin: emp.pin
+      }))
+    ];
+
+    const { data: empsData, error: empsError } = await supabase!
+      .from('employees')
+      .insert(formattedEmployees)
+      .select();
+
+    if (empsError) {
+      console.error('Erro ao cadastrar funcionários do onboarding:', empsError);
+      throw empsError;
+    }
+
+    const ownerEmp = empsData.find(e => e.pin === '0000') || empsData[0];
+
+    // 3. Inserir cardápio
+    if (menuItemsInput && menuItemsInput.length > 0) {
+      const formattedMenuItems = menuItemsInput.map(item => ({
+        store_id: storeId,
+        name: item.name,
+        price: item.price,
+        description: item.description || '',
+        category: item.category || 'Petiscos',
+        image_url: item.imageUrl || '🍔',
+        is_available: true,
+        is_promotion: item.isPromotion || false,
+        promotional_price: item.promotionalPrice || null
+      }));
+
+      const { error: menuError } = await supabase!
+        .from('menu_items')
+        .insert(formattedMenuItems);
+
+      if (menuError) {
+        console.error('Erro ao cadastrar itens do cardápio do onboarding:', menuError);
+      }
+    } else {
+      const defaultItems = [
+        { store_id: storeId, name: 'Água de Coco Gelada', price: 8.00, description: 'Coco verde natural.', category: 'Bebidas', image_url: '🥥', is_available: true, is_promotion: false },
+        { store_id: storeId, name: 'Caipirinha Tradicional', price: 18.00, description: 'Cachaça artesanal e limão.', category: 'Bebidas', image_url: '🍹', is_available: true, is_promotion: false },
+        { store_id: storeId, name: 'Isca de Peixe Crocante', price: 55.00, description: 'Filé de peixe frito.', category: 'Petiscos', image_url: '🐟', is_available: true, is_promotion: false }
+      ];
+      await supabase!.from('menu_items').insert(defaultItems);
+    }
+
+    return {
+      store: {
+        name: storeData.name,
+        logoUrl: storeData.logo_url,
+        address: storeData.address,
+        phone: storeData.phone,
+        tablesCount: storeData.tables_count,
+        serviceChargePercent: Number(storeData.service_charge_percent),
+        themeColor: storeData.theme_color || 'teal',
+        categories: storeData.categories || ['Bebidas', 'Petiscos', 'Sobremesas']
+      },
+      employee: {
+        id: ownerEmp.id,
+        name: ownerEmp.name,
+        role: ownerEmp.role as any,
+        pin: ownerEmp.pin
+      },
+      storeId: storeId
+    };
+  } catch (err: any) {
+    alert(err.message || 'Erro durante o cadastro do onboarding.');
+    return null;
+  }
+};
+
 // 2. Login do Dono (E-mail e Senha)
 export const loginOwner = async (
   email: string,

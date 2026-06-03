@@ -703,10 +703,10 @@ export const DashboardOwner: React.FC<DashboardOwnerProps> = ({
                     🎨 Identidade Visual / Tema
                   </label>
                   <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
-                    Selecione o esquema de cores que melhor combina com a sofisticação do seu quiosque/resort.
+                    Selecione um tema de luxo ou escolha sua própria cor de destaque personalizada abaixo.
                   </p>
                   
-                  <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '1rem' }}>
                     {[
                       { id: 'teal', name: 'Royal Teal', color: '#0F6A80' },
                       { id: 'coral', name: 'Sunset Coral', color: '#E76F51' },
@@ -744,6 +744,42 @@ export const DashboardOwner: React.FC<DashboardOwnerProps> = ({
                         {theme.name}
                       </button>
                     ))}
+                  </div>
+
+                  {/* Seletor de Cor Customizada */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    backgroundColor: '#f8fafc',
+                    padding: '0.8rem 1rem',
+                    borderRadius: '12px',
+                    border: '1px solid var(--border-color)',
+                    width: 'fit-content'
+                  }}>
+                    <input 
+                      type="color" 
+                      id="customColorPicker"
+                      value={storeThemeColor.startsWith('#') ? storeThemeColor : '#0F6A80'}
+                      onChange={e => setStoreThemeColor(e.target.value)}
+                      style={{
+                        width: '40px',
+                        height: '40px',
+                        border: 'none',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        padding: 0,
+                        backgroundColor: 'transparent'
+                      }}
+                    />
+                    <div>
+                      <label htmlFor="customColorPicker" style={{ fontSize: '0.8rem', fontWeight: 700, display: 'block', cursor: 'pointer' }}>
+                        Cor Personalizada
+                      </label>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                        {storeThemeColor.startsWith('#') ? storeThemeColor.toUpperCase() : 'Nenhuma selecionada'}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
