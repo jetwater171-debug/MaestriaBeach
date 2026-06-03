@@ -385,7 +385,7 @@ function App() {
   };
 
   return (
-    <div>
+    <div className={"theme-" + (storeInfo.themeColor || 'teal')}>
       {/* Barra de Simulação do Demo */}
       {currentRole !== 'login' && (
         <div style={{
@@ -524,6 +524,7 @@ function App() {
       {currentRole === 'waiter' && user && (
         <WaiterPanel 
           waiter={user}
+          storeInfo={storeInfo}
           menuItems={menuItems}
           orders={orders}
           onAddOrder={handleAddOrder}

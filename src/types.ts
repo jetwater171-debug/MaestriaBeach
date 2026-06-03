@@ -25,6 +25,8 @@ export interface StoreInfo {
   tablesCount: number;
   serviceChargePercent: number; // ex: 10%
   tenantCode?: string; // Código de login rápido da equipe
+  themeColor?: string; // 'teal' | 'coral' | 'gold' | 'emerald'
+  categories?: string[]; // Lista de categorias de cardápio personalizadas
 }
 
 export type OrderItemStatus = 'pending' | 'preparing' | 'ready' | 'delivered';

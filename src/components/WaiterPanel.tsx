@@ -6,8 +6,11 @@ import {
   Calculator, CheckSquare, Coins 
 } from 'lucide-react';
 
+import { StoreInfo } from '../types';
+
 interface WaiterPanelProps {
   waiter: Employee;
+  storeInfo: StoreInfo;
   menuItems: MenuItem[];
   orders: Order[];
   onAddOrder: (order: Order) => void;
@@ -20,6 +23,7 @@ type SubTabType = 'tables' | 'new-order' | 'my-orders';
 
 export const WaiterPanel: React.FC<WaiterPanelProps> = ({
   waiter,
+  storeInfo,
   menuItems,
   orders,
   onAddOrder,
@@ -42,8 +46,18 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('Todos');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
+  // Novos estados para responsividade e fluxo desktop
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [isAddingItemsToActiveTable, setIsAddingItemsToActiveTable] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // Auxiliares de categorias
-  const categories = ['Todos', ...Array.from(new Set(menuItems.map(item => item.category)))];
+  const categories = ['Todos', ...(storeInfo.categories || Array.from(new Set(menuItems.map(item => item.category))))];
 
   // Monitor de tempo (força re-render a cada minuto para atualizar os timers das mesas)
   const [, setTimeTick] = useState(0);
@@ -227,6 +241,453 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
 
   const myActiveOrders = orders.filter(o => o.waiterId === waiter.id && o.status === 'active');
   const activeOrderForSelectedTable = selectedTable ? orders.find(o => o.tableNumber === selectedTable && o.status === 'active') : null;
+
+  if (!isMobile) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+        {/* Header */}
+        <header className="brand-header">
+          <div className="brand-logo">
+            <div className="brand-logo-icon">🏖️</div>
+            <span style={{ color: 'var(--primary)' }}>{storeInfo.name}</span>
+            <span style={{
+              fontSize: '0.8rem',
+              padding: '0.2rem 0.6rem',
+              borderRadius: '50px',
+              backgroundColor: 'var(--accent-light)',
+              color: 'var(--accent)',
+              fontFamily: 'var(--font-body)',
+              fontWeight: 700,
+              marginLeft: '0.5rem'
+            }}>Painel do Garçom</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+              👤 Garçom: {waiter.name}
+            </span>
+            <button onClick={onLogout} className="btn btn-outline" style={{ gap: '0.5rem', padding: '0.4rem 1rem', borderRadius: '10px' }}>
+              <LogOut size={16} /> Sair
+            </button>
+          </div>
+        </header>
+
+        {/* Content Area */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', flexGrow: 1, height: 'calc(100vh - 75px)' }}>
+          {/* Coluna Esquerda: Tabelas ou Meus Lançamentos */}
+          <div style={{ padding: '2rem', borderRight: '1px solid var(--border-color)', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            {/* Abas */}
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button 
+                onClick={() => { setActiveTab('tables'); setIsAddingItemsToActiveTable(false); }} 
+                className={`btn ${activeTab === 'tables' ? 'btn-primary' : 'btn-outline'}`}
+                style={{ borderRadius: '12px', padding: '0.6rem 1.2rem' }}
+              >
+                <UtensilsCrossed size={16} /> Mesas & Guarda-sóis ({tables.length})
+              </button>
+              <button 
+                onClick={() => { setActiveTab('my-orders'); }} 
+                className={`btn ${activeTab === 'my-orders' ? 'btn-primary' : 'btn-outline'}`}
+                style={{ borderRadius: '12px', padding: '0.6rem 1.2rem' }}
+              >
+                <ClipboardList size={16} /> Meus Lançamentos ({myActiveOrders.length})
+              </button>
+            </div>
+
+            {activeTab === 'my-orders' ? (
+              // Conteúdo: Meus Lançamentos
+              <div>
+                <h3 style={{ fontSize: '1.25rem', marginBottom: '1rem', fontWeight: 800 }}>Meus Lançamentos do Dia</h3>
+                {myActiveOrders.length === 0 ? (
+                  <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    <p>Nenhum pedido ativo lançado por você no momento.</p>
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '1rem' }}>
+                    {myActiveOrders.map(order => (
+                      <div key={order.id} className="glass-panel" style={{ padding: '1.25rem' }}>
+                        <div className="flex-between" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '0.5rem' }}>
+                          <strong style={{ fontSize: '1.05rem' }}>Mesa {order.tableNumber}</strong>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>⏱️ {getTableOccupiedTime(order.createdAt)}</span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '150px', overflowY: 'auto' }}>
+                          {order.items.map((item, idx) => (
+                            <div key={idx} className="flex-between" style={{ fontSize: '0.85rem' }}>
+                              <span>{item.quantity}x {item.name}</span>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
+                                {item.status === 'pending' && <span className="badge badge-warning" style={{ fontSize: '0.6rem' }}><Clock size={10} /> Pendente</span>}
+                                {item.status === 'preparing' && <span className="badge badge-info" style={{ fontSize: '0.6rem' }}><Flame size={10} /> Prep</span>}
+                                {item.status === 'ready' && <span className="badge badge-success ready-badge-pulse" style={{ fontSize: '0.6rem' }}><CheckCircle size={10} /> Pronto</span>}
+                                {item.status === 'delivered' && <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>Ok</span>}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ borderTop: '1px solid var(--border-color)', marginTop: '0.75rem', paddingTop: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Subtotal:</span>
+                          <strong style={{ color: 'var(--secondary)' }}>R$ {order.subtotal.toFixed(2)}</strong>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              // Conteúdo: Grade de Mesas
+              <div>
+                <h3 style={{ fontSize: '1.25rem', marginBottom: '1rem', fontWeight: 800 }}>Mapa de Mesas</h3>
+                <div className="tables-grid">
+                  {tables.map(table => {
+                    const isActive = !!table.activeOrderId;
+                    const orderData = orders.find(o => o.id === table.activeOrderId);
+                    const tableTime = orderData ? getTableOccupiedTime(orderData.createdAt) : '';
+                    const isSelected = selectedTable === table.number;
+
+                    return (
+                      <div 
+                        key={table.number} 
+                        className={`table-card ${isActive ? 'occupied' : 'available'}`}
+                        style={{
+                          borderColor: isSelected ? 'var(--primary)' : undefined,
+                          borderWidth: isSelected ? '3px' : '2px',
+                          boxShadow: isSelected ? '0 0 15px rgba(15, 106, 128, 0.25)' : undefined,
+                          transform: isSelected ? 'translateY(-4px)' : undefined
+                        }}
+                        onClick={() => {
+                          setSelectedTable(table.number);
+                          setIsAddingItemsToActiveTable(false);
+                          if (!isActive) setCart({});
+                        }}
+                      >
+                        <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', position: 'absolute', top: '8px', left: '10px' }}>
+                          {isActive ? 'Ocupada' : 'Livre'}
+                        </span>
+                        <span className="table-number">{table.number}</span>
+                        {isActive && tableTime && (
+                          <span style={{
+                            fontSize: '0.6rem',
+                            fontWeight: 700,
+                            backgroundColor: 'rgba(255, 255, 255, 0.7)',
+                            padding: '2px 6px',
+                            borderRadius: '10px',
+                            color: 'var(--primary-dark)',
+                            position: 'absolute',
+                            bottom: '8px'
+                          }}>
+                            ⏱️ {tableTime}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Coluna Direita: POS Detalhes / Menu / Carrinho */}
+          <div style={{ padding: '2rem', overflowY: 'auto', background: 'rgba(255, 255, 255, 0.25)', display: 'flex', flexDirection: 'column' }}>
+            {selectedTable !== null ? (
+              <div>
+                {activeOrderForSelectedTable && !isAddingItemsToActiveTable ? (
+                  // Caso 1: Mesa Ocupada - Mostrar Consumo
+                  <div className="glass-panel" style={{ padding: '1.75rem' }}>
+                    <div className="flex-between" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem', marginBottom: '1.25rem' }}>
+                      <div>
+                        <h3 style={{ fontSize: '1.35rem', fontWeight: 800 }}>Consumo da Mesa {selectedTable}</h3>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                          ⏱️ Consumindo há {getTableOccupiedTime(activeOrderForSelectedTable.createdAt)}
+                        </span>
+                      </div>
+                      <button 
+                        onClick={() => setSelectedTable(null)} 
+                        className="btn btn-ghost" 
+                        style={{ padding: '0.25rem', color: 'var(--text-light)' }}
+                      >
+                        <X size={20} />
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '1.25rem' }}>
+                      <h4 style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-muted)' }}>Itens Consumidos</h4>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '250px', overflowY: 'auto', paddingRight: '5px' }}>
+                        {activeOrderForSelectedTable.items.map((item, idx) => (
+                          <div key={idx} className="flex-between" style={{ fontSize: '0.85rem', padding: '0.4rem 0', borderBottom: '1px dashed var(--border-color)' }}>
+                            <div>
+                              <span style={{ fontWeight: 600 }}>{item.quantity}x {item.name}</span>
+                              {item.observations && (
+                                <div style={{ fontSize: '0.72rem', color: 'var(--danger)', marginTop: '2px', fontWeight: 500 }}>
+                                  obs: {item.observations}
+                                </div>
+                              )}
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                              <span>
+                                {item.status === 'pending' && <span className="badge badge-warning" style={{ padding: '2px 6px', fontSize: '0.6rem' }}><Clock size={8} /> Pendente</span>}
+                                {item.status === 'preparing' && <span className="badge badge-info" style={{ padding: '2px 6px', fontSize: '0.6rem' }}><Flame size={8} /> Prep</span>}
+                                {item.status === 'ready' && <span className="badge badge-success ready-badge-pulse" style={{ padding: '2px 6px', fontSize: '0.6rem' }}><CheckCircle size={8} /> Pronto</span>}
+                                {item.status === 'delivered' && <span style={{ color: 'var(--text-light)', fontSize: '0.72rem' }}>Entregue</span>}
+                              </span>
+                              <strong style={{ color: 'var(--text-main)' }}>R$ {(item.price * item.quantity).toFixed(2)}</strong>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="flex-between" style={{ borderTop: '2px solid var(--border-color)', marginTop: '0.75rem', paddingTop: '0.75rem', fontWeight: 800 }}>
+                        <span style={{ fontSize: '0.95rem' }}>Subtotal:</span>
+                        <span style={{ color: 'var(--secondary)', fontSize: '1.25rem' }}>
+                          R$ {activeOrderForSelectedTable.items.reduce((s, i) => s + (i.price * i.quantity), 0).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Divisão de Conta */}
+                    <div className="glass-panel" style={{ padding: '1rem', marginBottom: '1.5rem', backgroundColor: 'var(--primary-light)', borderColor: 'rgba(15, 106, 128, 0.08)' }}>
+                      <h4 style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--primary-dark)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Calculator size={14} /> Dividir Conta (Calcular por Pessoa)
+                      </h4>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                        <span style={{ fontSize: '0.8rem' }}>Dividir entre:</span>
+                        <input 
+                          type="number" 
+                          min="1" 
+                          className="form-control" 
+                          style={{ width: '70px', padding: '4px 8px', borderRadius: '8px', fontSize: '0.8rem' }}
+                          value={splitPeople}
+                          onChange={e => setSplitPeople(e.target.value)} 
+                        />
+                        <span style={{ fontSize: '0.8rem' }}>pessoas</span>
+                      </div>
+
+                      {(() => {
+                        const sub = activeOrderForSelectedTable.items.reduce((s, i) => s + (i.price * i.quantity), 0);
+                        const people = Number(splitPeople) || 1;
+                        const splitValue = sub / people;
+                        const splitWithService = (sub * 1.1) / people;
+
+                        return (
+                          <div style={{ fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: '4px', borderTop: '1px solid rgba(15, 106, 128, 0.08)', paddingTop: '6px' }}>
+                            <div className="flex-between">
+                              <span>Consumo por pessoa:</span>
+                              <strong>R$ {splitValue.toFixed(2)}</strong>
+                            </div>
+                            <div className="flex-between" style={{ color: 'var(--primary-dark)', fontWeight: 700 }}>
+                              <span>Com +10% serviço:</span>
+                              <strong>R$ {splitWithService.toFixed(2)}</strong>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    {/* Botões de Ação */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <button
+                        onClick={() => {
+                          setCart({});
+                          setIsAddingItemsToActiveTable(true);
+                        }}
+                        className="btn btn-primary"
+                        style={{ width: '100%', borderRadius: '12px', padding: '0.75rem' }}
+                      >
+                        <Plus size={16} /> Adicionar Novos Itens à Mesa
+                      </button>
+
+                      <button
+                        onClick={() => handleRequestBill(selectedTable!)}
+                        className="btn btn-secondary"
+                        style={{ width: '100%', borderRadius: '12px', padding: '0.75rem', background: 'var(--success)' }}
+                      >
+                        <Coins size={16} /> Solicitar Fechamento ao Caixa
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  // Caso 2: Criando Pedido (ou adicionando itens à mesa ocupada)
+                  <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                    <div className="flex-between" style={{ marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
+                      <div>
+                        <h3 style={{ fontSize: '1.2rem', fontWeight: 800 }}>
+                          {isAddingItemsToActiveTable ? `Adicionar Itens: Mesa ${selectedTable}` : `Novo Pedido: Mesa ${selectedTable}`}
+                        </h3>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                          {isAddingItemsToActiveTable ? 'Os itens serão somados ao consumo da mesa' : 'Selecione os itens para enviar'}
+                        </span>
+                      </div>
+                      
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        {isAddingItemsToActiveTable && (
+                          <button 
+                            onClick={() => setIsAddingItemsToActiveTable(false)} 
+                            className="btn btn-outline" 
+                            style={{ padding: '0.3rem 0.6rem', fontSize: '0.72rem', borderRadius: '10px' }}
+                          >
+                            Voltar
+                          </button>
+                        )}
+                        <button 
+                          onClick={() => { setSelectedTable(null); setIsAddingItemsToActiveTable(false); }} 
+                          className="btn btn-ghost" 
+                          style={{ padding: '0.25rem', color: 'var(--text-light)' }}
+                        >
+                          <X size={20} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Filtro Pesquisa */}
+                    <div style={{ position: 'relative', marginBottom: '1rem' }}>
+                      <input 
+                        type="text" 
+                        placeholder="Pesquisar prato ou bebida..." 
+                        className="form-control"
+                        style={{ paddingLeft: '2.25rem', borderRadius: '12px', padding: '0.6rem 1rem 0.6rem 2.25rem', fontSize: '0.85rem' }}
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                      />
+                      <Search size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-light)' }} />
+                    </div>
+
+                    {/* Filtro Categorias */}
+                    <div style={{ 
+                      display: 'flex', 
+                      gap: '6px', 
+                      overflowX: 'auto', 
+                      paddingBottom: '0.5rem',
+                      marginBottom: '1rem',
+                      scrollbarWidth: 'none'
+                    }}>
+                      {categories.map(cat => (
+                        <button
+                          key={cat}
+                          onClick={() => setSelectedCategory(cat)}
+                          style={{
+                            padding: '0.35rem 0.75rem',
+                            borderRadius: '20px',
+                            border: '1px solid',
+                            borderColor: selectedCategory === cat ? 'var(--primary)' : 'var(--border-color)',
+                            backgroundColor: selectedCategory === cat ? 'var(--primary-light)' : 'white',
+                            color: selectedCategory === cat ? 'var(--primary-dark)' : 'var(--text-muted)',
+                            fontWeight: 600,
+                            fontSize: '0.72rem',
+                            whiteSpace: 'nowrap',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {cat}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Lista do Cardápio */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '280px', overflowY: 'auto', marginBottom: '1rem', paddingRight: '5px' }}>
+                      {filteredMenuItems.map(item => {
+                        const cartQty = cart[item.id]?.quantity || 0;
+                        return (
+                          <div key={item.id} className="glass-panel" style={{ padding: '0.5rem 0.75rem', display: 'flex', gap: '10px', alignItems: 'center' }}>
+                            <div style={{ fontSize: '1.4rem' }}>{item.imageUrl}</div>
+                            <div style={{ flexGrow: 1 }}>
+                              <h4 style={{ fontSize: '0.8rem', fontWeight: 700 }}>{item.name}</h4>
+                              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--secondary)' }}>
+                                R$ {(item.isPromotion && item.promotionalPrice ? item.promotionalPrice : item.price).toFixed(2)}
+                              </span>
+                            </div>
+                            
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              {cartQty > 0 ? (
+                                <>
+                                  <button onClick={() => removeFromCart(item.id)} style={{
+                                    width: '24px',
+                                    height: '24px',
+                                    borderRadius: '50%',
+                                    border: '1px solid var(--border-color)',
+                                    backgroundColor: 'white',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    cursor: 'pointer'
+                                  }}>
+                                    <Minus size={10} />
+                                  </button>
+                                  <span style={{ fontWeight: 700, width: '14px', textAlign: 'center', fontSize: '0.8rem' }}>{cartQty}</span>
+                                </>
+                              ) : null}
+                              <button onClick={() => addToCart(item.id)} style={{
+                                width: '24px',
+                                height: '24px',
+                                borderRadius: '50%',
+                                backgroundColor: 'var(--primary)',
+                                color: 'white',
+                                border: 'none',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer'
+                              }}>
+                                <Plus size={10} />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Observações e Enviar */}
+                    {Object.keys(cart).length > 0 && (
+                      <div>
+                        <div className="glass-panel" style={{ padding: '0.85rem', marginBottom: '1rem', backgroundColor: '#fdfbf7', border: '1px solid rgba(191, 161, 95, 0.15)' }}>
+                          <h4 style={{ fontSize: '0.75rem', fontWeight: 700, marginBottom: '0.4rem', color: 'var(--accent)' }}>
+                            📝 Observações do Pedido
+                          </h4>
+                          <div style={{ maxHeight: '100px', overflowY: 'auto' }}>
+                            {Object.entries(cart).map(([itemId, cartItem]) => {
+                              const menuItem = menuItems.find(m => m.id === itemId)!;
+                              return (
+                                <div key={itemId} style={{ marginBottom: '0.4rem' }}>
+                                  <span style={{ fontSize: '0.72rem', fontWeight: 600 }}>{menuItem.name} ({cartItem.quantity}x)</span>
+                                  <input
+                                    type="text"
+                                    placeholder="Observação (Ex: Sem cebola, gelo à parte)"
+                                    className="form-control"
+                                    style={{ padding: '0.3rem 0.5rem', fontSize: '0.72rem', marginTop: '2px' }}
+                                    value={cartItem.observations}
+                                    onChange={(e) => updateObservations(itemId, e.target.value)}
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <button 
+                          onClick={handleSendOrder} 
+                          className="btn btn-primary" 
+                          style={{ width: '100%', borderRadius: '12px', padding: '0.75rem', fontSize: '0.85rem' }}
+                        >
+                          <UtensilsCrossed size={16} /> Enviar {Object.values(cart).reduce((s, i) => s + i.quantity, 0)} Pedido(s)
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              // Nenhuma mesa selecionada - Mostrar Placeholder
+              <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div className="glass-panel text-center" style={{ padding: '3rem 2rem', maxWidth: '380px' }}>
+                  <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🏖️</div>
+                  <h3 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '0.5rem' }}>Maestria Beach</h3>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                    Selecione uma mesa ou guarda-sol na grade ao lado para gerenciar o consumo ou fazer lançamentos rápidos.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mobile-view">

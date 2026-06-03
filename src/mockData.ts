@@ -6,7 +6,9 @@ export const DEFAULT_STORE_INFO: StoreInfo = {
   address: 'Avenida Beira Mar, 1000 - Ceará, Brasil',
   phone: '(85) 99999-8888',
   tablesCount: 15,
-  serviceChargePercent: 10
+  serviceChargePercent: 10,
+  themeColor: 'teal',
+  categories: ['Bebidas', 'Petiscos', 'Sobremesas']
 };
 
 export const DEFAULT_MENU_ITEMS: MenuItem[] = [

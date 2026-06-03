@@ -3,7 +3,7 @@ import { StoreInfo, MenuItem, Employee, DailySale, Order } from '../types';
 import { 
   Store, Utensils, Users, TrendingUp, Plus, Trash2, 
   Save, DollarSign, ShoppingBag, Percent, LogOut, ShieldAlert,
-  Award, BarChart2, Hash
+  Award, BarChart2, Hash, X
 } from 'lucide-react';
 
 interface DashboardOwnerProps {
@@ -41,6 +41,23 @@ export const DashboardOwner: React.FC<DashboardOwnerProps> = ({
   const [storeTables, setStoreTables] = useState(storeInfo.tablesCount);
   const [storeServiceCharge, setStoreServiceCharge] = useState(storeInfo.serviceChargePercent);
 
+  // Novos estados para Tema e Categorias
+  const [storeThemeColor, setStoreThemeColor] = useState(storeInfo.themeColor || 'teal');
+  const [storeCategories, setStoreCategories] = useState<string[]>(storeInfo.categories || ['Bebidas', 'Petiscos', 'Sobremesas']);
+  const [newCategoryInput, setNewCategoryInput] = useState('');
+
+  // Sincronizar estados com props quando mudarem
+  React.useEffect(() => {
+    setStoreName(storeInfo.name);
+    setStoreLogo(storeInfo.logoUrl || '🏖️');
+    setStoreAddress(storeInfo.address || '');
+    setStorePhone(storeInfo.phone || '');
+    setStoreTables(storeInfo.tablesCount);
+    setStoreServiceCharge(storeInfo.serviceChargePercent);
+    setStoreThemeColor(storeInfo.themeColor || 'teal');
+    setStoreCategories(storeInfo.categories || ['Bebidas', 'Petiscos', 'Sobremesas']);
+  }, [storeInfo]);
+
   // Estados para Item do Cardápio
   const [showMenuModal, setShowMenuModal] = useState(false);
   const [newItemName, setNewItemName] = useState('');
@@ -65,9 +82,32 @@ export const DashboardOwner: React.FC<DashboardOwnerProps> = ({
       phone: storePhone,
       tablesCount: Number(storeTables),
       serviceChargePercent: Number(storeServiceCharge),
-      tenantCode: storeInfo.tenantCode // Mantém o código do inquilino
+      tenantCode: storeInfo.tenantCode, // Mantém o código do inquilino
+      themeColor: storeThemeColor,
+      categories: storeCategories
     });
     alert('Configurações da barraca salvas com sucesso! 🏖️');
+  };
+
+  const handleAddCategory = () => {
+    const trimmed = newCategoryInput.trim();
+    if (!trimmed) return;
+    if (storeCategories.includes(trimmed)) {
+      alert('Esta categoria já existe!');
+      return;
+    }
+    setStoreCategories([...storeCategories, trimmed]);
+    setNewCategoryInput('');
+  };
+
+  const handleDeleteCategory = (catToDelete: string) => {
+    const hasItems = menuItems.some(item => item.category === catToDelete);
+    if (hasItems) {
+      if (!confirm(`Atenção: Existem itens no cardápio na categoria "${catToDelete}". Se você remover a categoria, esses itens continuarão no cardápio mas a categoria não estará listada como ativa. Deseja continuar?`)) {
+        return;
+      }
+    }
+    setStoreCategories(storeCategories.filter(c => c !== catToDelete));
   };
 
   // Excluir item
@@ -657,7 +697,132 @@ export const DashboardOwner: React.FC<DashboardOwnerProps> = ({
                   </div>
                 </div>
 
-                <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '1rem', borderRadius: '12px' }}>
+                {/* Personalização Visual (Tema) */}
+                <div className="form-group" style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem', marginTop: '1.5rem' }}>
+                  <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    🎨 Identidade Visual / Tema
+                  </label>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+                    Selecione o esquema de cores que melhor combina com a sofisticação do seu quiosque/resort.
+                  </p>
+                  
+                  <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                    {[
+                      { id: 'teal', name: 'Royal Teal', color: '#0F6A80' },
+                      { id: 'coral', name: 'Sunset Coral', color: '#E76F51' },
+                      { id: 'gold', name: 'Sand Gold', color: '#BFA15F' },
+                      { id: 'emerald', name: 'Sea Emerald', color: '#0D9488' }
+                    ].map(theme => (
+                      <button
+                        key={theme.id}
+                        type="button"
+                        onClick={() => setStoreThemeColor(theme.id)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          padding: '0.6rem 1rem',
+                          borderRadius: '12px',
+                          border: '2px solid',
+                          borderColor: storeThemeColor === theme.id ? 'var(--primary)' : 'var(--border-color)',
+                          backgroundColor: storeThemeColor === theme.id ? 'var(--primary-light)' : 'white',
+                          color: 'var(--text-main)',
+                          cursor: 'pointer',
+                          fontWeight: 650,
+                          fontSize: '0.85rem',
+                          transition: 'all var(--transition-fast)'
+                        }}
+                      >
+                        <span style={{
+                          width: '16px',
+                          height: '16px',
+                          borderRadius: '50%',
+                          backgroundColor: theme.color,
+                          display: 'inline-block',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                        }} />
+                        {theme.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Categorias do Cardápio */}
+                <div className="form-group" style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem', marginTop: '1.5rem' }}>
+                  <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    🏷️ Categorias do Cardápio
+                  </label>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+                    Personalize as divisões do seu cardápio (ex: Bebidas, Petiscos, Sobremesas).
+                  </p>
+                  
+                  {/* Lista de Categorias Atuais */}
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '1rem' }}>
+                    {storeCategories.map(cat => (
+                      <div
+                        key={cat}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          backgroundColor: 'var(--primary-light)',
+                          color: 'var(--primary-dark)',
+                          padding: '0.4rem 0.8rem',
+                          borderRadius: '10px',
+                          fontSize: '0.8rem',
+                          fontWeight: 700,
+                          border: '1px solid rgba(15, 106, 128, 0.1)'
+                        }}
+                      >
+                        <span>{cat}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteCategory(cat)}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--danger)',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            padding: 0
+                          }}
+                          title="Remover Categoria"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Formulário para Adicionar Categoria */}
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <input
+                      type="text"
+                      placeholder="Nova categoria (Ex: Coquetéis, Porções)"
+                      className="form-control"
+                      style={{ flexGrow: 1, padding: '0.6rem 0.9rem', fontSize: '0.85rem' }}
+                      value={newCategoryInput}
+                      onChange={e => setNewCategoryInput(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddCategory();
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddCategory}
+                      className="btn btn-outline"
+                      style={{ padding: '0.6rem 1.2rem', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', flexShrink: 0 }}
+                    >
+                      <Plus size={16} /> Adicionar
+                    </button>
+                  </div>
+                </div>
+
+                <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '1.5rem', borderRadius: '12px' }}>
                   <Save size={18} /> Salvar Dados Comerciais
                 </button>
               </form>
@@ -711,9 +876,9 @@ export const DashboardOwner: React.FC<DashboardOwnerProps> = ({
                   <div className="form-group">
                     <label className="form-label">Categoria</label>
                     <select className="form-control" value={newItemCategory} onChange={e => setNewItemCategory(e.target.value)}>
-                      <option value="Petiscos">Petiscos</option>
-                      <option value="Bebidas">Bebidas</option>
-                      <option value="Sobremesas">Sobremesas</option>
+                      {(storeInfo.categories || ['Bebidas', 'Petiscos', 'Sobremesas']).map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
                       <option value="Outros">Outros</option>
                     </select>
                   </div>

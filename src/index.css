@@ -51,6 +51,36 @@
   --transition-slow: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Temas Personalizados */
+.theme-teal {
+  --primary: #0F6A80;
+  --primary-rgb: 15, 106, 128;
+  --primary-dark: #0A4A5A;
+  --primary-light: #F0F8FA;
+  --border-focus: #BFA15F;
+}
+.theme-coral {
+  --primary: #E76F51;
+  --primary-rgb: 231, 111, 81;
+  --primary-dark: #C94C30;
+  --primary-light: #FDF0ED;
+  --border-focus: #E76F51;
+}
+.theme-gold {
+  --primary: #BFA15F;
+  --primary-rgb: 191, 161, 95;
+  --primary-dark: #9F8043;
+  --primary-light: #FAF8F4;
+  --border-focus: #BFA15F;
+}
+.theme-emerald {
+  --primary: #0D9488;
+  --primary-rgb: 13, 148, 136;
+  --primary-dark: #0F766E;
+  --primary-light: #F0FDFA;
+  --border-focus: #0D9488;
+}
+
 /* Reset Geral */
 * {
   margin: 0;

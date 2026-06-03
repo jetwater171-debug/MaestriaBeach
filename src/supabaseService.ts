@@ -76,7 +76,9 @@ export const registerNewStore = async (
         address: storeData.address,
         phone: storeData.phone,
         tablesCount: storeData.tables_count,
-        serviceChargePercent: Number(storeData.service_charge_percent)
+        serviceChargePercent: Number(storeData.service_charge_percent),
+        themeColor: storeData.theme_color || 'teal',
+        categories: storeData.categories || ['Bebidas', 'Petiscos', 'Sobremesas']
       },
       employee: {
         id: empData.id,
@@ -132,7 +134,9 @@ export const loginOwner = async (
       phone: storeData.phone,
       tablesCount: storeData.tables_count,
       serviceChargePercent: Number(storeData.service_charge_percent),
-      tenantCode: storeData.tenant_code // Exibe o código no painel
+      tenantCode: storeData.tenant_code, // Exibe o código no painel
+      themeColor: storeData.theme_color || 'teal',
+      categories: storeData.categories || ['Bebidas', 'Petiscos', 'Sobremesas']
     },
     employee: {
       id: empData.id,
@@ -183,7 +187,9 @@ export const loginEmployee = async (
       address: storeData.address,
       phone: storeData.phone,
       tablesCount: storeData.tables_count,
-      serviceChargePercent: Number(storeData.service_charge_percent)
+      serviceChargePercent: Number(storeData.service_charge_percent),
+      themeColor: storeData.theme_color || 'teal',
+      categories: storeData.categories || ['Bebidas', 'Petiscos', 'Sobremesas']
     },
     employee: {
       id: empData.id,
@@ -220,7 +226,9 @@ export const fetchStoreInfo = async (storeId: string): Promise<StoreInfo | null>
     phone: data.phone,
     tablesCount: data.tables_count,
     serviceChargePercent: Number(data.service_charge_percent),
-    tenantCode: data.tenant_code
+    tenantCode: data.tenant_code,
+    themeColor: data.theme_color || 'teal',
+    categories: data.categories || ['Bebidas', 'Petiscos', 'Sobremesas']
   };
 };
 
@@ -236,7 +244,9 @@ export const updateStoreInfoSupabase = async (storeId: string, info: StoreInfo):
       address: info.address,
       phone: info.phone,
       tables_count: info.tablesCount,
-      service_charge_percent: info.serviceChargePercent
+      service_charge_percent: info.serviceChargePercent,
+      theme_color: info.themeColor || 'teal',
+      categories: info.categories || ['Bebidas', 'Petiscos', 'Sobremesas']
     })
     .eq('id', storeId);
 
