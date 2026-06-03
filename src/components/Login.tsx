@@ -202,25 +202,26 @@ export const Login: React.FC<LoginProps> = ({ employees, onLoginSuccess, storeNa
         {mode !== 'register' && (
           <div style={{
             display: 'flex',
-            backgroundColor: 'rgba(226, 232, 240, 0.5)',
-            padding: '4px',
-            borderRadius: '12px',
-            marginBottom: '1.5rem'
+            backgroundColor: 'rgba(15, 106, 128, 0.08)',
+            padding: '5px',
+            borderRadius: '14px',
+            marginBottom: '1.75rem',
+            border: '1px solid rgba(191, 161, 95, 0.15)'
           }}>
             <button
               onClick={() => { setMode('staff'); setError(''); }}
               style={{
                 flex: 1,
-                padding: '0.5rem',
+                padding: '0.6rem',
                 border: 'none',
-                borderRadius: '8px',
+                borderRadius: '10px',
                 backgroundColor: mode === 'staff' ? 'white' : 'transparent',
-                color: mode === 'staff' ? 'var(--primary-dark)' : 'var(--text-muted)',
-                fontWeight: 600,
+                color: mode === 'staff' ? 'var(--primary)' : 'var(--text-muted)',
+                fontWeight: 700,
                 fontSize: '0.8rem',
                 cursor: 'pointer',
-                boxShadow: mode === 'staff' ? 'var(--shadow-sm)' : 'none',
-                transition: 'all 0.2s'
+                boxShadow: mode === 'staff' ? '0 4px 10px rgba(15, 106, 128, 0.05)' : 'none',
+                transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
               }}
             >
               💼 Sou Equipe
@@ -229,16 +230,16 @@ export const Login: React.FC<LoginProps> = ({ employees, onLoginSuccess, storeNa
               onClick={() => { setMode('owner'); setError(''); }}
               style={{
                 flex: 1,
-                padding: '0.5rem',
+                padding: '0.6rem',
                 border: 'none',
-                borderRadius: '8px',
+                borderRadius: '10px',
                 backgroundColor: mode === 'owner' ? 'white' : 'transparent',
-                color: mode === 'owner' ? 'var(--primary-dark)' : 'var(--text-muted)',
-                fontWeight: 600,
+                color: mode === 'owner' ? 'var(--primary)' : 'var(--text-muted)',
+                fontWeight: 700,
                 fontSize: '0.8rem',
                 cursor: 'pointer',
-                boxShadow: mode === 'owner' ? 'var(--shadow-sm)' : 'none',
-                transition: 'all 0.2s'
+                boxShadow: mode === 'owner' ? '0 4px 10px rgba(15, 106, 128, 0.05)' : 'none',
+                transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
               }}
             >
               👑 Sou Dono

@@ -74,6 +74,9 @@ function App() {
   // 1. Carregar dados iniciais e restaurar sessão (Auto-login)
   useEffect(() => {
     const loadSessionAndData = async () => {
+      // Sempre inicializa o LocalStorage com os dados mockados de demonstração
+      initializeLocalStorage();
+      
       const isSupabaseActive = checkSupabase();
       
       if (isSupabaseActive) {
@@ -102,6 +105,11 @@ function App() {
             console.error('Erro ao restaurar sessão cacheada:', err);
             loadLocalFallback();
           }
+        } else {
+          // Se não houver sessão ativa do Supabase, preenche os funcionários locais 
+          // para que o guia rápido e o fallback local na tela de login funcionem na hora
+          setEmployees(getEmployees());
+          setStoreInfo(getStoreInfo());
         }
       } else {
         setDbMode('local');
@@ -508,6 +516,7 @@ function App() {
           employees={employees}
           onUpdateEmployees={handleUpdateEmployees}
           sales={sales}
+          orders={orders}
           onLogout={handleLogout}
         />
       )}

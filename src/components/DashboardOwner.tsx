@@ -14,6 +14,7 @@ interface DashboardOwnerProps {
   employees: Employee[];
   onUpdateEmployees: (employees: Employee[]) => void;
   sales: DailySale[];
+  orders: Order[];
   onLogout: () => void;
 }
 
@@ -27,6 +28,7 @@ export const DashboardOwner: React.FC<DashboardOwnerProps> = ({
   employees,
   onUpdateEmployees,
   sales,
+  orders,
   onLogout
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
@@ -157,25 +159,70 @@ export const DashboardOwner: React.FC<DashboardOwnerProps> = ({
     { pix: 0, card: 0, cash: 0 }
   );
 
-  // 1. Cômputo: Vendas por Categoria (Comidas vs Bebidas)
-  // Para fins de demonstração no MVP, vamos extrair os dados simulados
-  // Se houver dados reais de vendas, fazemos o cálculo proporcional.
-  // Proporção de vendas padrão: 60% comidas, 40% bebidas (com base no cardápio típico)
-  const ratioFood = 62; // Proporção simulada premium
-  const ratioDrink = 38;
+  // 1. Cômputo: Vendas por Categoria (Comidas vs Bebidas) de forma 100% dinâmica
+  const getCategorySalesRatio = () => {
+    let foodSales = 0;
+    let drinkSales = 0;
 
-  // 2. Cômputo: Ranking de Garçons (Leaderboard)
-  // Criaremos uma lista agregada de vendas dos garçons para o ranking
-  // Se não houver ordens completadas, mostramos dados mockados simulados de forma elegante
-  const getWaiterPerformance = () => {
-    // Para fins do MVP com Supabase, podemos buscar pedidos fechados e calcular.
-    // Criamos um ranking mockado padrão que se soma a eventuais vendas reais:
-    const waiterStats: Record<string, { name: string; total: number; count: number }> = {
-      'Carlos Santos': { name: 'Carlos Santos', total: 320.00, count: 6 },
-      'Mariana Souza': { name: 'Mariana Souza', total: 450.00, count: 8 }
+    orders.forEach(order => {
+      if (order.status === 'completed') {
+        order.items.forEach(item => {
+          const menuItem = menuItems.find(m => m.id === item.menuItemId || m.name === item.name);
+          const category = menuItem?.category || 'Petiscos';
+          const value = item.price * item.quantity;
+          if (category === 'Bebidas') {
+            drinkSales += value;
+          } else {
+            foodSales += value;
+          }
+        });
+      }
+    });
+
+    const total = foodSales + drinkSales;
+    if (total === 0) return { food: 60, drink: 40 }; // Fallback padrão equilibrado
+    return {
+      food: Math.round((foodSales / total) * 100),
+      drink: Math.round((drinkSales / total) * 100)
     };
+  };
 
-    return Object.values(waiterStats).sort((a, b) => b.total - a.total);
+  const { food: ratioFood, drink: ratioDrink } = getCategorySalesRatio();
+
+  // 2. Cômputo: Ranking de Garçons (Leaderboard) de forma 100% dinâmica
+  const getWaiterPerformance = () => {
+    const stats: Record<string, { name: string; total: number; count: number }> = {};
+    
+    // Inicializa estatísticas para todos os funcionários cadastrados que são garçons (para que apareçam no ranking mesmo com zero vendas)
+    employees.forEach(emp => {
+      if (emp.role === 'waiter') {
+        stats[emp.name] = { name: emp.name, total: 0, count: 0 };
+      }
+    });
+
+    // Soma as vendas reais dos garçons de pedidos concluídos
+    orders.forEach(order => {
+      if (order.status === 'completed' && order.waiterName) {
+        const name = order.waiterName;
+        if (!stats[name]) {
+          stats[name] = { name, total: 0, count: 0 };
+        }
+        stats[name].total += order.total;
+        stats[name].count += 1;
+      }
+    });
+
+    const sortedStats = Object.values(stats).sort((a, b) => b.total - a.total);
+    
+    // Se não houver vendas reais de garçons, injeta estatísticas fictícias de teste para a tela não ficar vazia no onboarding
+    if (sortedStats.length === 0 || sortedStats.every(s => s.total === 0)) {
+      return [
+        { name: 'Carlos Santos (Exemplo)', total: 320.00, count: 6 },
+        { name: 'Mariana Souza (Exemplo)', total: 450.00, count: 8 }
+      ].sort((a, b) => b.total - a.total);
+    }
+
+    return sortedStats;
   };
 
   const waiterLeaderboard = getWaiterPerformance();
