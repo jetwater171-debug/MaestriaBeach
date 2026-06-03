@@ -358,48 +358,127 @@ export const Login: React.FC<LoginProps> = ({ employees, onLoginSuccess, storeNa
   }, [pin]);
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '1.5rem',
-      background: 'var(--bg-gradient)'
-    }}>
-      <div className="glass-panel" style={{
-        width: '100%',
-        maxWidth: (mode === 'register' && onboardingStep === 3) ? '720px' : '460px',
-        padding: '2.5rem 2rem',
-        border: '1px solid rgba(255, 255, 255, 0.7)',
-        transition: 'max-width 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
-      }}>
-        {/* Cabeçalho da Identidade */}
-        <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-          <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: '64px',
-            height: '64px',
-            borderRadius: '50%',
-            background: 'linear-gradient(135deg, var(--primary), var(--secondary))',
-            color: 'white',
-            fontSize: '2rem',
-            boxShadow: '0 8px 20px rgba(14, 165, 233, 0.25)',
-            marginBottom: '0.75rem'
-          }}>
-            🏖️
-          </div>
-          <h1 style={{ fontSize: '1.85rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '0.25rem' }}>
+    <div className="landing-page">
+      {/* 1. Cabeçalho / Navbar Superior */}
+      <header className="landing-nav">
+        <div 
+          className="brand-logo" 
+          style={{ cursor: 'pointer' }}
+          onClick={() => { setMode('staff'); setError(''); }}
+        >
+          <div className="brand-logo-icon">🏖️</div>
+          <span style={{ fontSize: '1.45rem', fontWeight: 800, fontFamily: 'var(--font-title)', letterSpacing: '-0.02em', background: 'linear-gradient(135deg, var(--primary), var(--secondary))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
             Maestria Beach
-          </h1>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-            Gestão Premium de Quiosques & Barracas
-          </p>
+          </span>
+        </div>
+        
+        <div className="landing-nav-links">
+          <a href="#recursos" className="landing-nav-link">Recursos</a>
+          <a href="#planos" className="landing-nav-link">Planos</a>
+          <a href="#depoimentos" className="landing-nav-link">Depoimentos</a>
         </div>
 
-        {/* Seleção de Abas */}
-        {mode !== 'register' && (
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button 
+            onClick={() => { setMode('staff'); setError(''); document.getElementById('auth-portal')?.scrollIntoView({ behavior: 'smooth' }); }}
+            className="btn btn-outline"
+            style={{ padding: '0.5rem 1rem', fontSize: '0.8rem', borderRadius: '10px' }}
+          >
+            Área Equipe
+          </button>
+          <button 
+            onClick={() => { setMode('register'); setOnboardingStep(1); setError(''); document.getElementById('auth-portal')?.scrollIntoView({ behavior: 'smooth' }); }}
+            className="btn btn-primary"
+            style={{ padding: '0.5rem 1rem', fontSize: '0.8rem', borderRadius: '10px' }}
+          >
+            Criar Barraca
+          </button>
+        </div>
+      </header>
+
+      {/* 2. Hero Section Split (Apresentação + Portal de Acesso) */}
+      <section className="landing-hero">
+        {/* Esquerda: Mensagem de Vendas & Badges de Diferenciais */}
+        <div className="hero-text">
+          <div className="hero-tag">
+            <Sparkles size={14} style={{ color: 'var(--secondary)' }} />
+            <span>O Único POS 100% Responsivo para Beach Clubs & Quiosques</span>
+          </div>
+          <h2 className="hero-title" style={{ fontSize: '2.8rem', lineHeight: '1.15', fontWeight: 800 }}>
+            Transforme sua Barraca de Praia num Império de Vendas
+          </h2>
+          <p className="hero-subtitle" style={{ fontSize: '1.05rem', color: 'var(--text-muted)', lineHeight: '1.6' }}>
+            Cardápio inteligente com IA OCR (tire fotos de cardápios físicos), painel da cozinha com chimes de áudio, fechamento de caixa automatizado por Pix/Cartão/Dinheiro e gestão multi-tenant. Desenvolvido para funcionar em celulares, tablets ou PCs sob o sol forte.
+          </p>
+
+          <div className="hero-benefits">
+            <div className="benefit-badge">
+              <span>🤖</span>
+              <span>Leitor de Cardápio por IA Scanner</span>
+            </div>
+            <div className="benefit-badge">
+              <span>🔊</span>
+              <span>Alertas Sonoros na Cozinha/Bar</span>
+            </div>
+            <div className="benefit-badge">
+              <span>📊</span>
+              <span>Fluxo de Caixa & Métricas em Tempo Real</span>
+            </div>
+            <div className="benefit-badge">
+              <span>🔄</span>
+              <span>Modo Offline (LocalStorage Fallback)</span>
+            </div>
+          </div>
+
+          {/* Mini Testimonial / Social Proof */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '1.5rem' }}>
+            <div style={{ display: 'flex' }}>
+              {[1, 2, 3, 4, 5].map(i => (
+                <span key={i} style={{ color: '#F59E0B', fontSize: '1.25rem' }}>★</span>
+              ))}
+            </div>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 650 }}>
+              +150 estabelecimentos ativos no Rio de Janeiro, Ceará e Jurerê Internacional.
+            </span>
+          </div>
+        </div>
+
+        {/* Direita: Portal de Login/Wizard */}
+        <div id="auth-portal" className="glass-panel" style={{
+          width: '100%',
+          maxWidth: (mode === 'register' && onboardingStep === 3) ? '720px' : '480px',
+          padding: '2.5rem 2rem',
+          border: '1px solid rgba(255, 255, 255, 0.7)',
+          transition: 'max-width 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+          boxShadow: 'var(--shadow-premium)',
+          margin: '0 auto'
+        }}>
+          {/* Identidade do Card */}
+          <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '56px',
+              height: '56px',
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, var(--primary), var(--secondary))',
+              color: 'white',
+              fontSize: '1.85rem',
+              boxShadow: '0 8px 20px rgba(14, 165, 233, 0.25)',
+              marginBottom: '0.5rem'
+            }}>
+              🏖️
+            </div>
+            <h3 style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '0.15rem' }}>
+              Maestria Beach
+            </h3>
+            <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+              Gestão Premium de Quiosques & Barracas
+            </p>
+          </div>
+
+          {/* Seleção de Abas (Modo Dono, Equipe ou Cadastro) */}
           <div style={{
             display: 'flex',
             backgroundColor: 'rgba(15, 106, 128, 0.08)',
@@ -418,7 +497,7 @@ export const Login: React.FC<LoginProps> = ({ employees, onLoginSuccess, storeNa
                 backgroundColor: mode === 'staff' ? 'white' : 'transparent',
                 color: mode === 'staff' ? 'var(--primary)' : 'var(--text-muted)',
                 fontWeight: 700,
-                fontSize: '0.8rem',
+                fontSize: '0.75rem',
                 cursor: 'pointer',
                 boxShadow: mode === 'staff' ? '0 4px 10px rgba(15, 106, 128, 0.05)' : 'none',
                 transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
@@ -436,7 +515,7 @@ export const Login: React.FC<LoginProps> = ({ employees, onLoginSuccess, storeNa
                 backgroundColor: mode === 'owner' ? 'white' : 'transparent',
                 color: mode === 'owner' ? 'var(--primary)' : 'var(--text-muted)',
                 fontWeight: 700,
-                fontSize: '0.8rem',
+                fontSize: '0.75rem',
                 cursor: 'pointer',
                 boxShadow: mode === 'owner' ? '0 4px 10px rgba(15, 106, 128, 0.05)' : 'none',
                 transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
@@ -444,8 +523,25 @@ export const Login: React.FC<LoginProps> = ({ employees, onLoginSuccess, storeNa
             >
               👑 Sou Dono
             </button>
+            <button
+              onClick={() => { setMode('register'); setOnboardingStep(1); setError(''); }}
+              style={{
+                flex: 1,
+                padding: '0.6rem',
+                border: 'none',
+                borderRadius: '10px',
+                backgroundColor: mode === 'register' ? 'white' : 'transparent',
+                color: mode === 'register' ? 'var(--primary)' : 'var(--text-muted)',
+                fontWeight: 700,
+                fontSize: '0.75rem',
+                cursor: 'pointer',
+                boxShadow: mode === 'register' ? '0 4px 10px rgba(15, 106, 128, 0.05)' : 'none',
+                transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
+              }}
+            >
+              🚀 Criar Barraca
+            </button>
           </div>
-        )}
 
         {error && (
           <div style={{
@@ -1350,7 +1446,7 @@ export const Login: React.FC<LoginProps> = ({ employees, onLoginSuccess, storeNa
             <span style={{ color: 'var(--text-muted)' }}>
               É proprietário e quer usar na sua praia?{' '}
               <button
-                onClick={() => { setMode('register'); setError(''); }}
+                onClick={() => { setMode('register'); setOnboardingStep(1); setError(''); }}
                 style={{
                   background: 'transparent',
                   border: 'none',
@@ -1422,6 +1518,246 @@ export const Login: React.FC<LoginProps> = ({ employees, onLoginSuccess, storeNa
           </div>
         )}
       </div>
+      </section>
+
+      {/* 3. Recursos Section */}
+      <section id="recursos" className="landing-section" style={{ borderTop: '1px solid rgba(191, 161, 95, 0.15)', backgroundColor: 'rgba(255, 255, 255, 0.25)' }}>
+        <div className="section-header">
+          <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Por que Escolher a Maestria Beach?
+          </span>
+          <h2 style={{ fontSize: '2rem', fontWeight: 800 }}>Feito Sob Medida para Quiosques & Resorts</h2>
+          <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+            Esqueça comandas perdidas de papel ou pedidos cruzados na cozinha. Automatize seu fluxo do guarda-sol ao fechamento de caixa.
+          </p>
+        </div>
+
+        <div className="features-grid">
+          <div className="feature-card glass-panel">
+            <div className="feature-icon-wrapper">
+              <span style={{ fontSize: '1.5rem' }}>🤖</span>
+            </div>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 700 }}>Cardápio Inteligente com Scanner IA</h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+              Esqueça digitações demoradas. Suba a imagem do seu cardápio de papel e veja nossa Inteligência Artificial ler e importar todos os pratos, categorias e preços em segundos.
+            </p>
+          </div>
+
+          <div className="feature-card glass-panel">
+            <div className="feature-icon-wrapper">
+              <span style={{ fontSize: '1.5rem' }}>🍳</span>
+            </div>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 700 }}>Painel de Cozinha & Bar c/ Chimes</h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+              Divida a fila por categorias (Cozinha vs Bar) com total isolamento. Efeitos de chimes sonoros alertam seus colaboradores a cada novo pedido para atendimento recorde.
+            </p>
+          </div>
+
+          <div className="feature-card glass-panel">
+            <div className="feature-icon-wrapper">
+              <span style={{ fontSize: '1.5rem' }}>📱</span>
+            </div>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 700 }}>POS Ultra-Responsivo c/ Split Screen</h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+              Layout em duas colunas (Mapa de Mesas vs Menu) otimizado para tablets e desktops. Ideal para gerentes operarem com velocidade máxima e agilidade.
+            </p>
+          </div>
+
+          <div className="feature-card glass-panel">
+            <div className="feature-icon-wrapper">
+              <span style={{ fontSize: '1.5rem' }}>📊</span>
+            </div>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 700 }}>Métricas Financeiras & Caixa</h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+              Acompanhe vendas por método de pagamento (Pix, Cartão, Dinheiro), gráficos interativos de faturamento e ranking de vendas dos garçons em tempo real.
+            </p>
+          </div>
+
+          <div className="feature-card glass-panel">
+            <div className="feature-icon-wrapper">
+              <span style={{ fontSize: '1.5rem' }}>💸</span>
+            </div>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 700 }}>Divisor de Conta & Calculadora de Troco</h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+              Facilidade total no checkout. Divida a conta por número de pessoas e calcule trocos instantaneamente no celular do garçom ou no monitor do caixa.
+            </p>
+          </div>
+
+          <div className="feature-card glass-panel">
+            <div className="feature-icon-wrapper">
+              <span style={{ fontSize: '1.5rem' }}>🔒</span>
+            </div>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 700 }}>Design Moderno de Alta Segurança</h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+              Arquitetura multi-tenant com banco de dados isolado e criptografia completa. Sua barraca de praia com o melhor nível de segurança tecnológica global.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* 4. Planos Section */}
+      <section id="planos" className="landing-section">
+        <div className="section-header">
+          <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Nossos Planos
+          </span>
+          <h2 style={{ fontSize: '2rem', fontWeight: 800 }}>O Investimento Certo para Todos os Tamanhos</h2>
+          <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+            Digitalize o seu quiosque ou beach club hoje mesmo. Sem taxa de cancelamento ou taxas ocultas.
+          </p>
+        </div>
+
+        <div className="pricing-grid">
+          {/* Bronze */}
+          <div className="pricing-card glass-panel">
+            <div style={{ textAlign: 'left' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Bronze (Quiosque Standard)</span>
+              <div className="pricing-price">R$ 149<span style={{ fontSize: '1rem', fontWeight: 500, color: 'var(--text-muted)' }}>/mês</span></div>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Para pequenos quiosques familiares e barracas iniciando sua digitalização.</p>
+            </div>
+            <ul className="pricing-features-list">
+              <li className="pricing-feature-item active">✓ Até 15 mesas configuráveis</li>
+              <li className="pricing-feature-item active">✓ Cadastro de até 3 colaboradores</li>
+              <li className="pricing-feature-item active">✓ Painel de Garçom responsivo</li>
+              <li className="pricing-feature-item" style={{ opacity: 0.4 }}>✗ Painel de Cozinha em Tempo Real</li>
+              <li className="pricing-feature-item" style={{ opacity: 0.4 }}>✗ Scanner de Cardápios por IA</li>
+            </ul>
+            <button 
+              onClick={() => { setMode('register'); setOnboardingStep(1); setError(''); document.getElementById('auth-portal')?.scrollIntoView({ behavior: 'smooth' }); }}
+              className="btn btn-outline"
+              style={{ width: '100%', borderRadius: '12px' }}
+            >
+              Iniciar Agora
+            </button>
+          </div>
+
+          {/* Prata - Mais Vendido */}
+          <div className="pricing-card glass-panel recommended">
+            <div className="pricing-recommended-badge">Mais Popular 🏖️</div>
+            <div style={{ textAlign: 'left' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--primary)', textTransform: 'uppercase' }}>Prata (Beach Club Premium)</span>
+              <div className="pricing-price">R$ 299<span style={{ fontSize: '1rem', fontWeight: 500, color: 'var(--text-muted)' }}>/mês</span></div>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>O plano definitivo para barracas consolidadas, com total agilidade e controle.</p>
+            </div>
+            <ul className="pricing-features-list">
+              <li className="pricing-feature-item active">✓ Até 40 mesas configuráveis</li>
+              <li className="pricing-feature-item active">✓ Cadastros de colaboradores ilimitados</li>
+              <li className="pricing-feature-item active">✓ Painel de Cozinha & Bar c/ Som</li>
+              <li className="pricing-feature-item active">✓ Scanner IA de Cardápio Físico</li>
+              <li className="pricing-feature-item active">✓ Gráficos de Faturamento & Métricas</li>
+            </ul>
+            <button 
+              onClick={() => { setMode('register'); setOnboardingStep(1); setError(''); document.getElementById('auth-portal')?.scrollIntoView({ behavior: 'smooth' }); }}
+              className="btn btn-primary"
+              style={{ width: '100%', borderRadius: '12px' }}
+            >
+              Experimentar Grátis
+            </button>
+          </div>
+
+          {/* Ouro */}
+          <div className="pricing-card glass-panel">
+            <div style={{ textAlign: 'left' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Ouro (Resort / Enterprise)</span>
+              <div className="pricing-price">R$ 599<span style={{ fontSize: '1rem', fontWeight: 500, color: 'var(--text-muted)' }}>/mês</span></div>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Para redes de beach clubs de luxo, Resorts, Marinas e Hotéis Beira Mar.</p>
+            </div>
+            <ul className="pricing-features-list">
+              <li className="pricing-feature-item active">✓ Zonas e mesas ilimitadas</li>
+              <li className="pricing-feature-item active">✓ Multi-Terminais de Cozinha & Bar</li>
+              <li className="pricing-feature-item active">✓ Personalização completa de Marca Branca</li>
+              <li className="pricing-feature-item active">✓ Exportação de dados e APIs customizadas</li>
+              <li className="pricing-feature-item active">✓ Gerente de Conta dedicado 24/7 VIP</li>
+            </ul>
+            <button 
+              onClick={() => { setMode('register'); setOnboardingStep(1); setError(''); document.getElementById('auth-portal')?.scrollIntoView({ behavior: 'smooth' }); }}
+              className="btn btn-outline"
+              style={{ width: '100%', borderRadius: '12px' }}
+            >
+              Falar com Consultor
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* 5. Depoimentos Section */}
+      <section id="depoimentos" className="landing-section" style={{ borderTop: '1px solid rgba(191, 161, 95, 0.15)', backgroundColor: 'rgba(255, 255, 255, 0.15)' }}>
+        <div className="section-header">
+          <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Depoimentos
+          </span>
+          <h2 style={{ fontSize: '2rem', fontWeight: 800 }}>Histórias de Sucesso Reais</h2>
+          <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+            Descubra como outros empresários de praia transformaram seus quiosques.
+          </p>
+        </div>
+
+        <div className="testimonials-grid">
+          <div className="testimonial-card glass-panel">
+            <div style={{ display: 'flex', color: '#F59E0B', gap: '2px', fontSize: '1rem' }}>
+              {[1, 2, 3, 4, 5].map(i => <span key={i}>★</span>)}
+            </div>
+            <p className="testimonial-quote">
+              "Com o Maestria Beach diminuímos os erros de pedido em 90%. O garçom atende na areia e a cozinha já começa a preparar. O fechamento de caixa por PIX agora bate em segundos."
+            </p>
+            <div className="testimonial-user">
+              <div className="testimonial-avatar">MC</div>
+              <div>
+                <strong style={{ fontSize: '0.85rem', display: 'block' }}>Marcos Castro</strong>
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Gerente do Coco Beach (Copacabana, RJ)</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="testimonial-card glass-panel">
+            <div style={{ display: 'flex', color: '#F59E0B', gap: '2px', fontSize: '1rem' }}>
+              {[1, 2, 3, 4, 5].map(i => <span key={i}>★</span>)}
+            </div>
+            <p className="testimonial-quote">
+              "A funcionalidade de scanner por IA é incrível. Subi a foto do meu cardápio impresso de peixes e bebidas e o sistema puxou tudo. O tema personalizado na cor da nossa barraca ficou lindo."
+            </p>
+            <div className="testimonial-user">
+              <div className="testimonial-avatar">AM</div>
+              <div>
+                <strong style={{ fontSize: '0.85rem', display: 'block' }}>Ana Moreira</strong>
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Dona da Barraca Algas Marinhas (Fortaleza, CE)</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="testimonial-card glass-panel">
+            <div style={{ display: 'flex', color: '#F59E0B', gap: '2px', fontSize: '1rem' }}>
+              {[1, 2, 3, 4, 5].map(i => <span key={i}>★</span>)}
+            </div>
+            <p className="testimonial-quote">
+              "Nossa operação no tablet split screen facilitou a vida do supervisor de caixa. Ele controla o mapa de consumo e a conta de longe. Recomendo fortemente a qualquer beach club."
+            </p>
+            <div className="testimonial-user">
+              <div className="testimonial-avatar">RF</div>
+              <div>
+                <strong style={{ fontSize: '0.85rem', display: 'block' }}>Rodrigo Faria</strong>
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Sócio-fundador do Sunset Club (Jurerê, SC)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 6. Footer */}
+      <footer className="landing-footer">
+        <span className="footer-logo">🏖️ Maestria Beach</span>
+        <p style={{ fontSize: '0.8rem', maxWidth: '500px', margin: '0 auto 1.5rem auto' }}>
+          A plataforma SaaS definitiva para otimizar, gerenciar e alavancar o faturamento de quiosques de praia, resorts e beach clubs.
+        </p>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '1.5rem', fontSize: '0.8rem', marginBottom: '1.5rem' }}>
+          <a href="#recursos" style={{ color: '#94a3b8', textDecoration: 'none' }}>Recursos</a>
+          <a href="#planos" style={{ color: '#94a3b8', textDecoration: 'none' }}>Planos</a>
+          <a href="#depoimentos" style={{ color: '#94a3b8', textDecoration: 'none' }}>Depoimentos</a>
+        </div>
+        <p style={{ fontSize: '0.7rem', color: '#64748b' }}>
+          &copy; {new Date().getFullYear()} Maestria Beach. Todos os direitos reservados.
+        </p>
+      </footer>
     </div>
   );
 };
