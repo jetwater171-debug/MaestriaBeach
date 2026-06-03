@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MenuItem, Employee, Order, OrderItem, Table, TableStatus } from '../types';
 import { 
   ClipboardList, ShoppingCart, User, LogOut, CheckCircle, 
-  Clock, Flame, Plus, Minus, Search, Tag, X, UtensilsCrossed 
+  Clock, Flame, Plus, Minus, Search, X, UtensilsCrossed, 
+  Calculator, CheckSquare, Coins 
 } from 'lucide-react';
 
 interface WaiterPanelProps {
@@ -28,16 +29,43 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<SubTabType>('tables');
   
-  // Estado de seleção para Novo Pedido
+  // Mesa ativa e controles
   const [selectedTable, setSelectedTable] = useState<number | null>(null);
+  const [showTableOpsModal, setShowTableOpsModal] = useState(false);
   const [cart, setCart] = useState<{ [menuItemId: string]: { quantity: number; observations: string } }>({});
   
-  // Filtro de categorias do cardápio no pedido
+  // Estado da calculadora de divisão de conta
+  const [showSplitCalc, setShowSplitCalc] = useState(false);
+  const [splitPeople, setSplitPeople] = useState('2');
+
+  // Filtro de cardápio
   const [selectedCategory, setSelectedCategory] = useState<string>('Todos');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Auxiliares de categorias
   const categories = ['Todos', ...Array.from(new Set(menuItems.map(item => item.category)))];
+
+  // Monitor de tempo (força re-render a cada minuto para atualizar os timers das mesas)
+  const [, setTimeTick] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setTimeTick(t => t + 1), 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Formata o tempo decorrido de uma mesa ocupada
+  const getTableOccupiedTime = (createdAtString?: string) => {
+    if (!createdAtString) return '';
+    const created = new Date(createdAtString);
+    const now = new Date();
+    const diffMs = now.getTime() - created.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    
+    if (diffMins < 1) return 'Abril agora';
+    if (diffMins < 60) return `${diffMins} min`;
+    const hours = Math.floor(diffMins / 60);
+    const mins = diffMins % 60;
+    return `${hours}h${mins > 0 ? mins + 'm' : ''}`;
+  };
 
   // Listagem dinâmica das mesas
   const getTables = (): Table[] => {
@@ -47,13 +75,9 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
       let status: TableStatus = 'available';
       
       if (activeOrder) {
-        // Se houver algum item aguardando fechamento ou se já foi solicitado
+        // Se já pediu a conta ou está aguardando fechamento
         const hasWaitingBill = activeOrder.items.length > 0 && activeOrder.items.every(item => item.status === 'delivered');
-        // Para simplificar, o caixa marca quando a mesa pede a conta, mas vamos colocar 'occupied' por padrão
-        // se tiver pedido ativo, e se o garçom solicitar a conta (vamos adicionar botão para isso).
-        status = activeOrder.items.some(item => item.status === 'delivered') && activeOrder.items.length > 0 
-          ? 'occupied' 
-          : 'occupied';
+        status = hasWaitingBill ? 'waiting_bill' : 'occupied';
       }
       list.push({ number: i, status, activeOrderId: activeOrder?.id });
     }
@@ -62,12 +86,27 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
 
   const tables = getTables();
 
+  // Garçom clica em uma mesa da grade
+  const handleTableClick = (tableNumber: number) => {
+    setSelectedTable(tableNumber);
+    const activeOrder = orders.find(o => o.tableNumber === tableNumber && o.status === 'active');
+    
+    if (activeOrder) {
+      // Mesa já está ocupada: abre modal de opções
+      setShowTableOpsModal(true);
+    } else {
+      // Mesa está livre: abre direto a tela de novo pedido
+      setCart({});
+      setActiveTab('new-order');
+    }
+  };
+
   // Garçom solicita o fechamento (chama o caixa)
   const handleRequestBill = (tableNumber: number) => {
     const activeOrder = orders.find(o => o.tableNumber === tableNumber && o.status === 'active');
     if (!activeOrder) return;
     
-    // Atualiza o status de todos os itens para delivered caso falte algum para simular fechamento
+    // Marca todos os itens pendentes como entregues e atualiza ordem
     const updatedItems = activeOrder.items.map(item => ({
       ...item,
       status: 'delivered' as const
@@ -79,9 +118,10 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
     });
     
     alert(`Fechamento da mesa ${tableNumber} solicitado ao caixa! 💰`);
+    setShowTableOpsModal(false);
   };
 
-  // Funções do Carrinho de Compras do Garçom
+  // Funções do Carrinho
   const addToCart = (menuItemId: string) => {
     setCart(prev => ({
       ...prev,
@@ -119,13 +159,6 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
     }));
   };
 
-  const handleStartOrder = (tableNumber: number) => {
-    setSelectedTable(tableNumber);
-    setCart({});
-    setActiveTab('new-order');
-  };
-
-  // Enviar pedido do garçom para a cozinha
   const handleSendOrder = () => {
     if (!selectedTable) return;
     
@@ -151,7 +184,6 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
     });
 
     if (activeOrder) {
-      // Adiciona itens ao pedido existente
       const updatedItems = [...activeOrder.items, ...newItems];
       const subtotal = updatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
       
@@ -160,9 +192,8 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
         items: updatedItems,
         subtotal
       });
-      alert(`Itens adicionados com sucesso à Mesa ${selectedTable}! 🍽️`);
+      alert(`Itens adicionados com sucesso à Mesa ${selectedTable}! 🍽9`);
     } else {
-      // Cria um novo pedido
       const subtotal = newItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
       const newOrder: Order = {
         id: 'ord_' + Date.now(),
@@ -173,7 +204,7 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
         status: 'active',
         createdAt: new Date().toISOString(),
         subtotal,
-        serviceCharge: 0, // Calculado no fechamento pelo caixa
+        serviceCharge: 0,
         discount: 0,
         total: subtotal
       };
@@ -182,21 +213,20 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
       alert(`Novo pedido iniciado na Mesa ${selectedTable}! 🔥`);
     }
 
-    // Resetar estados
     setCart({});
     setSelectedTable(null);
     setActiveTab('tables');
   };
 
-  // Filtrar itens do cardápio na tela de pedido
+  // Filtrar itens do cardápio
   const filteredMenuItems = menuItems.filter(item => {
     const matchesCategory = selectedCategory === 'Todos' || item.category === selectedCategory;
     const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCategory && matchesSearch && item.isAvailable;
   });
 
-  // Pedidos feitos por esse garçom
   const myActiveOrders = orders.filter(o => o.waiterId === waiter.id && o.status === 'active');
+  const activeOrderForSelectedTable = selectedTable ? orders.find(o => o.tableNumber === selectedTable && o.status === 'active') : null;
 
   return (
     <div className="mobile-view">
@@ -237,44 +267,43 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
         {/* TELA 1: SELEÇÃO DE MESAS */}
         {activeTab === 'tables' && (
           <div>
-            <h3 style={{ fontSize: '1.1rem', marginBottom: '0.75rem', display: 'flex', justifyContent: 'space-between' }}>
-              Grade de Mesas & Guarda-sóis
-            </h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Mesas & Guarda-sóis</h3>
+              <div style={{ display: 'flex', gap: '10px', fontSize: '0.65rem', fontWeight: 600 }}>
+                <span style={{ color: 'var(--success)' }}>● Livre</span>
+                <span style={{ color: 'var(--primary)' }}>● Ocupada</span>
+              </div>
+            </div>
             
             <div className="tables-grid">
               {tables.map(table => {
                 const isActive = !!table.activeOrderId;
+                const orderData = orders.find(o => o.id === table.activeOrderId);
+                const tableTime = orderData ? getTableOccupiedTime(orderData.createdAt) : '';
+
                 return (
                   <div 
                     key={table.number} 
                     className={`table-card ${isActive ? 'occupied' : 'available'}`}
-                    onClick={() => handleStartOrder(table.number)}
+                    onClick={() => handleTableClick(table.number)}
                   >
-                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', position: 'absolute', top: '8px', left: '10px' }}>
+                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', position: 'absolute', top: '8px', left: '10px' }}>
                       {isActive ? 'Ocupada' : 'Livre'}
                     </span>
                     <span className="table-number">{table.number}</span>
-                    {isActive && (
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleRequestBill(table.number);
-                        }}
-                        style={{
-                          fontSize: '0.65rem',
-                          background: 'var(--secondary)',
-                          border: 'none',
-                          borderRadius: '4px',
-                          color: 'white',
-                          padding: '2px 6px',
-                          cursor: 'pointer',
-                          fontWeight: 600,
-                          position: 'absolute',
-                          bottom: '8px'
-                        }}
-                      >
-                        Pedir Conta
-                      </button>
+                    {isActive && tableTime && (
+                      <span style={{
+                        fontSize: '0.6rem',
+                        fontWeight: 700,
+                        backgroundColor: 'rgba(255, 255, 255, 0.6)',
+                        padding: '2px 6px',
+                        borderRadius: '10px',
+                        color: 'var(--primary-dark)',
+                        position: 'absolute',
+                        bottom: '8px'
+                      }}>
+                        ⏱️ {tableTime}
+                      </span>
                     )}
                   </div>
                 );
@@ -283,24 +312,23 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
           </div>
         )}
 
-        {/* TELA 2: NOVO PEDIDO (CARRINHO E CARDÁPIO) */}
+        {/* TELA 2: NOVO PEDIDO / ADICIONAR ITENS */}
         {activeTab === 'new-order' && (
           <div>
             {selectedTable === null ? (
               <div style={{ textAlign: 'center', padding: '2rem' }}>
-                <p style={{ color: 'var(--text-muted)', marginBottom: '1rem' }}>Por favor, selecione uma mesa primeiro na aba anterior.</p>
+                <p style={{ color: 'var(--text-muted)', marginBottom: '1rem' }}>Selecione uma mesa primeiro na grade.</p>
                 <button onClick={() => setActiveTab('tables')} className="btn btn-primary">Voltar para Mesas</button>
               </div>
             ) : (
               <div>
                 <div className="flex-between" style={{ marginBottom: '1rem' }}>
-                  <h3 style={{ fontSize: '1.1rem' }}>Lançar na Mesa {selectedTable}</h3>
+                  <h3 style={{ fontSize: '1.1rem' }}>Mesa {selectedTable}: Lançar Pedido</h3>
                   <button onClick={() => { setSelectedTable(null); setActiveTab('tables'); }} className="btn btn-ghost" style={{ padding: '0.25rem', color: 'var(--text-muted)' }}>
                     <X size={20} />
                   </button>
                 </div>
 
-                {/* Filtro de Busca */}
                 <div style={{ position: 'relative', marginBottom: '1rem' }}>
                   <input 
                     type="text" 
@@ -313,7 +341,7 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
                   <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-light)' }} />
                 </div>
 
-                {/* Categorias Tabs horizontais */}
+                {/* Categorias */}
                 <div style={{ 
                   display: 'flex', 
                   gap: '8px', 
@@ -344,7 +372,7 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
                   ))}
                 </div>
 
-                {/* Grid do Cardápio para Garçom */}
+                {/* Cardápio */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.5rem' }}>
                   {filteredMenuItems.map(item => {
                     const cartQty = cart[item.id]?.quantity || 0;
@@ -358,7 +386,6 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
                           </span>
                         </div>
                         
-                        {/* Controles de Quantidade */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           {cartQty > 0 ? (
                             <>
@@ -370,8 +397,7 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
                                 backgroundColor: 'white',
                                 display: 'flex',
                                 alignItems: 'center',
-                                justifyContent: 'center',
-                                cursor: 'pointer'
+                                justifyContent: 'center'
                               }}>
                                 <Minus size={14} />
                               </button>
@@ -387,8 +413,7 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
                             border: 'none',
                             display: 'flex',
                             alignItems: 'center',
-                            justifyContent: 'center',
-                            cursor: 'pointer'
+                            justifyContent: 'center'
                           }}>
                             <Plus size={14} />
                           </button>
@@ -398,11 +423,11 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
                   })}
                 </div>
 
-                {/* Formulário/Lista de Observações dos itens selecionados */}
+                {/* Observações */}
                 {Object.keys(cart).length > 0 && (
                   <div className="glass-panel" style={{ padding: '1rem', marginBottom: '1.5rem', backgroundColor: '#fdfbf7' }}>
                     <h4 style={{ fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.5rem', color: 'var(--accent)' }}>
-                      📝 Observações do Pedido (Ex: Sem gelo, limão espremido)
+                      📝 Observações do Pedido
                     </h4>
                     {Object.entries(cart).map(([itemId, cartItem]) => {
                       const menuItem = menuItems.find(m => m.id === itemId)!;
@@ -411,7 +436,7 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
                           <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>{menuItem.name} ({cartItem.quantity}x)</span>
                           <input
                             type="text"
-                            placeholder="Observação (opcional)"
+                            placeholder="Observação (Ex: Sem cebola, gelo à parte)"
                             className="form-control"
                             style={{ padding: '0.4rem 0.6rem', fontSize: '0.75rem', marginTop: '3px' }}
                             value={cartItem.observations}
@@ -423,7 +448,7 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
                   </div>
                 )}
 
-                {/* Botão de Enviar Carrinho */}
+                {/* Botão de Enviar */}
                 {Object.keys(cart).length > 0 && (
                   <button 
                     onClick={handleSendOrder} 
@@ -441,7 +466,7 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
         {/* TELA 3: MEUS PEDIDOS / STATUS */}
         {activeTab === 'my-orders' && (
           <div>
-            <h3 style={{ fontSize: '1.1rem', marginBottom: '0.75rem' }}>Pedidos que Lançou Hoje</h3>
+            <h3 style={{ fontSize: '1.1rem', marginBottom: '0.75rem' }}>Meus Lançamentos do Dia</h3>
             {myActiveOrders.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
                 <p>Nenhum pedido ativo lançado por você no momento.</p>
@@ -477,24 +502,146 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
 
       </div>
 
+      {/* MODAL INTERATIVO: OPERAÇÕES DA MESA OCUPADA */}
+      {showTableOpsModal && activeOrderForSelectedTable && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '420px', borderRadius: '24px' }}>
+            <div className="modal-header">
+              <div>
+                <h3 style={{ fontSize: '1.35rem', fontWeight: 800 }}>Mesa {selectedTable}</h3>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  ⏱️ Consumindo há {getTableOccupiedTime(activeOrderForSelectedTable.createdAt)}
+                </span>
+              </div>
+              <button onClick={() => { setShowTableOpsModal(false); setShowSplitCalc(false); }} className="btn btn-ghost" style={{ fontSize: '1.2rem' }}>×</button>
+            </div>
+
+            <div className="modal-body">
+              {/* Resumo do Consumo */}
+              <div className="glass-panel" style={{ padding: '1rem', marginBottom: '1.25rem', backgroundColor: '#f8fafc' }}>
+                <h4 style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Itens Lançados</h4>
+                <div style={{ maxHeight: '120px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  {activeOrderForSelectedTable.items.map((item, idx) => (
+                    <div key={idx} className="flex-between" style={{ fontSize: '0.8rem' }}>
+                      <span>{item.quantity}x {item.name}</span>
+                      <strong style={{ color: 'var(--text-muted)' }}>R$ {(item.price * item.quantity).toFixed(2)}</strong>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex-between" style={{ borderTop: '1px solid var(--border-color)', marginTop: '8px', paddingTop: '8px', fontWeight: 700 }}>
+                  <span>Subtotal:</span>
+                  <span style={{ color: 'var(--secondary)', fontSize: '1.05rem' }}>
+                    R$ {activeOrderForSelectedTable.items.reduce((s, i) => s + (i.price * i.quantity), 0).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Botão Calculadora de Divisão de Conta */}
+              {!showSplitCalc ? (
+                <button 
+                  onClick={() => setShowSplitCalc(true)} 
+                  className="btn btn-outline" 
+                  style={{ width: '100%', marginBottom: '1.25rem', borderRadius: '12px', gap: '8px' }}
+                >
+                  <Calculator size={16} /> Dividir Conta (Calcular por Pessoa)
+                </button>
+              ) : (
+                <div className="glass-panel" style={{ padding: '1rem', marginBottom: '1.25rem', borderColor: 'var(--primary-light)', backgroundColor: 'var(--primary-light)' }}>
+                  <div className="flex-between" style={{ marginBottom: '8px' }}>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--primary-dark)' }}>🧮 Divisão por Pessoa</span>
+                    <button onClick={() => setShowSplitCalc(false)} className="btn btn-ghost" style={{ padding: 0, fontSize: '0.75rem', color: 'var(--primary-dark)' }}>Esconder</button>
+                  </div>
+                  
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 500 }}>Dividir entre:</span>
+                    <input 
+                      type="number" 
+                      min="1" 
+                      className="form-control" 
+                      style={{ width: '70px', padding: '4px 8px', borderRadius: '8px', fontSize: '0.85rem' }}
+                      value={splitPeople}
+                      onChange={e => setSplitPeople(e.target.value)} 
+                    />
+                    <span style={{ fontSize: '0.8rem', fontWeight: 500 }}>pessoas</span>
+                  </div>
+
+                  {/* Cálculos da Divisão */}
+                  {(() => {
+                    const sub = activeOrderForSelectedTable.items.reduce((s, i) => s + (i.price * i.quantity), 0);
+                    const people = Number(splitPeople) || 1;
+                    const splitValue = sub / people;
+                    const splitWithService = (sub * 1.1) / people;
+
+                    return (
+                      <div style={{ fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <div className="flex-between">
+                          <span>Apenas consumo:</span>
+                          <strong>R$ {splitValue.toFixed(2)} por pessoa</strong>
+                        </div>
+                        <div className="flex-between" style={{ color: 'var(--primary-dark)' }}>
+                          <span>Com +10% de serviço:</span>
+                          <strong>R$ {splitWithService.toFixed(2)} por pessoa</strong>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* Ações principais */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <button
+                  onClick={() => {
+                    setCart({});
+                    setShowTableOpsModal(false);
+                    setActiveTab('new-order');
+                  }}
+                  className="btn btn-primary"
+                  style={{ width: '100%', borderRadius: '12px', gap: '6px' }}
+                >
+                  <Plus size={16} /> Adicionar Novos Itens
+                </button>
+
+                <button
+                  onClick={() => handleRequestBill(selectedTable!)}
+                  className="btn btn-secondary"
+                  style={{ width: '100%', borderRadius: '12px', gap: '6px', background: 'var(--success)' }}
+                >
+                  <Coins size={16} /> Solicitar Fechamento ao Caixa
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Mobile Footer Navigation */}
       <nav className="mobile-nav">
         <button 
-          onClick={() => setActiveTab('tables')} 
+          onClick={() => { setActiveTab('tables'); setShowTableOpsModal(false); }} 
           className={`mobile-nav-btn ${activeTab === 'tables' ? 'active' : ''}`}
         >
           <UtensilsCrossed size={20} />
           <span>Mesas</span>
         </button>
         <button 
-          onClick={() => setActiveTab('new-order')} 
+          onClick={() => { 
+            // Abre o lançamento para a última mesa selecionada ou pede seleção
+            if (selectedTable === null) {
+              alert('Selecione uma mesa primeiro na aba anterior.');
+              setActiveTab('tables');
+            } else {
+              setCart({});
+              setActiveTab('new-order');
+            }
+          }} 
           className={`mobile-nav-btn ${activeTab === 'new-order' ? 'active' : ''}`}
         >
           <ShoppingCart size={20} />
           <span>Lançar</span>
         </button>
         <button 
-          onClick={() => setActiveTab('my-orders')} 
+          onClick={() => { setActiveTab('my-orders'); setShowTableOpsModal(false); }} 
           className={`mobile-nav-btn ${activeTab === 'my-orders' ? 'active' : ''}`}
         >
           <ClipboardList size={20} />

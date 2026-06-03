@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Order, Employee, StoreInfo, DailySale } from '../types';
+import { Order, Employee, StoreInfo } from '../types';
 import { 
   DollarSign, Receipt, Percent, ShieldCheck, LogOut, 
-  CreditCard, Coins, Check, Calculator, AlertTriangle 
+  CreditCard, Coins, Check, Calculator, AlertTriangle, 
+  TrendingUp, ArrowRightLeft 
 } from 'lucide-react';
 
 interface CashierPanelProps {
@@ -10,7 +11,13 @@ interface CashierPanelProps {
   storeInfo: StoreInfo;
   orders: Order[];
   onUpdateOrder: (order: Order) => void;
-  onCloseOrder: (orderId: string, paymentMethod: 'pix' | 'card' | 'cash', discount: number, serviceCharge: number, total: number) => void;
+  onCloseOrder: (
+    orderId: string, 
+    paymentMethod: 'pix' | 'card' | 'cash', 
+    discount: number, 
+    serviceCharge: number, 
+    total: number
+  ) => void;
   onLogout: () => void;
 }
 
@@ -30,27 +37,58 @@ export const CashierPanel: React.FC<CashierPanelProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<'pix' | 'card' | 'cash' | null>(null);
   const [showReceipt, setShowReceipt] = useState(false);
 
+  // Estados para cálculo de troco (Dinheiro)
+  const [cashAmountPaid, setCashAmountPaid] = useState('');
+
   // Apenas ordens ativas
   const activeOrders = orders.filter(o => o.status === 'active');
   const selectedOrder = activeOrders.find(o => o.id === selectedOrderId);
 
-  // Cálculos financeiros
+  // Cálculos financeiros do pedido selecionado
   const subtotal = selectedOrder ? selectedOrder.items.reduce((sum, item) => sum + (item.price * item.quantity), 0) : 0;
   const serviceCharge = applyServiceCharge ? (subtotal * (storeInfo.serviceChargePercent / 100)) : 0;
   const discount = Number(discountInput) || 0;
   const total = Math.max(0, subtotal + serviceCharge - discount);
 
+  // Cálculo do Troco
+  const paidAmount = Number(cashAmountPaid) || 0;
+  const changeToReturn = paidAmount > total ? (paidAmount - total) : 0;
+
+  // Cômputo do fechamento de caixa do dia atual
+  const getTodayCashFlow = () => {
+    const todayStr = new Date().toLocaleDateString('pt-BR');
+    const closedOrdersToday = orders.filter(o => 
+      o.status === 'completed' && 
+      o.completedAt && 
+      new Date(o.completedAt).toLocaleDateString('pt-BR') === todayStr
+    );
+
+    return closedOrdersToday.reduce(
+      (acc, order) => {
+        const val = order.total || 0;
+        if (order.paymentMethod === 'pix') acc.pix += val;
+        if (order.paymentMethod === 'card') acc.card += val;
+        if (order.paymentMethod === 'cash') acc.cash += val;
+        acc.total += val;
+        return acc;
+      },
+      { pix: 0, card: 0, cash: 0, total: 0 }
+    );
+  };
+
+  const todayCashFlow = getTodayCashFlow();
+
   const handleSelectOrder = (orderId: string) => {
     setSelectedOrderId(orderId);
     setPaymentMethod(null);
     setDiscountInput('');
+    setCashAmountPaid('');
     setShowReceipt(false);
   };
 
   const handleCloseTable = () => {
     if (!selectedOrder || !paymentMethod) return;
     
-    // Verifica se há algum item que não foi entregue na cozinha
     const hasUnpreparedItems = selectedOrder.items.some(item => item.status !== 'delivered');
     if (hasUnpreparedItems) {
       if (!confirm('Esta mesa possui itens que ainda não foram entregues ou preparados. Deseja fechar a conta mesmo assim?')) {
@@ -65,6 +103,7 @@ export const CashierPanel: React.FC<CashierPanelProps> = ({
     setSelectedOrderId(null);
     setPaymentMethod(null);
     setDiscountInput('');
+    setCashAmountPaid('');
     setShowReceipt(false);
   };
 
@@ -98,11 +137,37 @@ export const CashierPanel: React.FC<CashierPanelProps> = ({
 
       {/* Main Cashier Workspace */}
       <main className="content-area">
+        
+        {/* Painel de Faturamento Diário do Caixa */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+          gap: '1rem',
+          marginBottom: '2rem'
+        }}>
+          <div className="glass-panel" style={{ padding: '1rem', borderLeft: '4px solid var(--primary)' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Total PIX hoje</span>
+            <h4 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--primary-dark)' }}>R$ {todayCashFlow.pix.toFixed(2)}</h4>
+          </div>
+          <div className="glass-panel" style={{ padding: '1rem', borderLeft: '4px solid var(--secondary)' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Total Cartão hoje</span>
+            <h4 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--secondary)' }}>R$ {todayCashFlow.card.toFixed(2)}</h4>
+          </div>
+          <div className="glass-panel" style={{ padding: '1rem', borderLeft: '4px solid var(--accent)' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Total Dinheiro hoje</span>
+            <h4 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--accent)' }}>R$ {todayCashFlow.cash.toFixed(2)}</h4>
+          </div>
+          <div className="glass-panel" style={{ padding: '1rem', borderLeft: '4px solid var(--success)' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>Fechamento Geral</span>
+            <h4 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--success)' }}>R$ {todayCashFlow.total.toFixed(2)}</h4>
+          </div>
+        </div>
+
         <div className="cashier-layout">
           
           {/* Coluna Esquerda: Lista de Mesas Ativas */}
           <div>
-            <h2 style={{ fontSize: '1.75rem', marginBottom: '1.5rem' }}>Controle de Mesas & Contas</h2>
+            <h2 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '1rem' }}>Contas Ativas</h2>
             
             {activeOrders.length === 0 ? (
               <div style={{
@@ -114,21 +179,19 @@ export const CashierPanel: React.FC<CashierPanelProps> = ({
                 boxShadow: 'var(--shadow-sm)'
               }}>
                 <Receipt size={48} style={{ color: 'var(--text-light)', marginBottom: '1rem' }} />
-                <h3 style={{ fontSize: '1.25rem', marginBottom: '0.25rem' }}>Sem Mesas Ativas</h3>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Nenhum cliente consumindo no momento. Aguardando garçom...</p>
+                <h3 style={{ fontSize: '1.25rem', marginBottom: '0.25rem' }}>Sem Contas Pendentes</h3>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Nenhuma mesa ativa consumindo no momento.</p>
               </div>
             ) : (
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
                 gap: '1rem'
               }}>
                 {activeOrders.map(order => {
                   const orderSum = order.items.reduce((sum, i) => sum + (i.price * i.quantity), 0);
                   const isSelected = order.id === selectedOrderId;
-                  
-                  // Se garçom solicitou conta, ou todos os pratos estão prontos
-                  const allDelivered = order.items.every(i => i.status === 'delivered');
+                  const allDelivered = order.items.length > 0 && order.items.every(i => i.status === 'delivered');
                   
                   return (
                     <div
@@ -158,7 +221,7 @@ export const CashierPanel: React.FC<CashierPanelProps> = ({
                         Mesa {order.tableNumber}
                       </h3>
                       <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
-                        Atendente: {order.waiterName.split(' ')[0]}
+                        Garçom: {order.waiterName.split(' ')[0]}
                       </p>
                       <div className="flex-between">
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-light)' }}>Consumo:</span>
@@ -245,8 +308,8 @@ export const CashierPanel: React.FC<CashierPanelProps> = ({
                 </div>
 
                 {/* Métodos de Pagamento */}
-                <div style={{ marginBottom: '1.5rem' }}>
-                  <span className="form-label" style={{ marginBottom: '0.5rem' }}>Selecione o Meio de Pagamento</span>
+                <div style={{ marginBottom: '1.25rem' }}>
+                  <span className="form-label" style={{ marginBottom: '0.5rem' }}>Meio de Pagamento</span>
                   
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
                     <button
@@ -317,18 +380,54 @@ export const CashierPanel: React.FC<CashierPanelProps> = ({
                   </div>
                 </div>
 
+                {/* Calculadora de Troco (Dinheiro) */}
+                {paymentMethod === 'cash' && (
+                  <div className="glass-panel" style={{
+                    padding: '1rem',
+                    marginBottom: '1.25rem',
+                    background: '#fdfbf7',
+                    border: '1px solid var(--accent-light)'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                      <ArrowRightLeft size={16} style={{ color: 'var(--accent)' }} />
+                      <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-main)' }}>Calculadora de Troco</span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Valor Pago:</span>
+                      <input 
+                        type="number" 
+                        placeholder="R$ 0,00" 
+                        className="form-control"
+                        style={{ width: '110px', padding: '4px 8px', fontSize: '0.85rem', textAlign: 'right' }}
+                        value={cashAmountPaid}
+                        onChange={e => setCashAmountPaid(e.target.value)}
+                      />
+                    </div>
+
+                    {paidAmount > 0 && (
+                      <div className="flex-between" style={{ marginTop: '10px', borderTop: '1px dashed #cbd5e1', paddingTop: '8px' }}>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>Troco a devolver:</span>
+                        <strong style={{ fontSize: '1.1rem', color: paidAmount >= total ? 'var(--success)' : 'var(--danger)' }}>
+                          {paidAmount >= total ? `R$ ${changeToReturn.toFixed(2)}` : 'Valor insuficiente'}
+                        </strong>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Simulação de PIX QR Code */}
                 {paymentMethod === 'pix' && (
                   <div className="glass-panel" style={{
                     padding: '1rem',
-                    marginBottom: '1.5rem',
+                    marginBottom: '1.25rem',
                     textAlign: 'center',
                     background: '#f8fafc',
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center'
                   }}>
-                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)' }}>⚡ PIX Gerado para Celular do Cliente</span>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)' }}>⚡ PIX Gerado (Copia e Cola)</span>
                     <div style={{
                       margin: '0.5rem 0',
                       width: '100px',
@@ -341,16 +440,30 @@ export const CashierPanel: React.FC<CashierPanelProps> = ({
                       justifyContent: 'center',
                       fontSize: '3rem'
                     }}>📱</div>
-                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>O cliente pode escanear ou copiar a chave Pix Copia e Cola</span>
+                    <textarea 
+                      readOnly 
+                      value={`00020101021226850014br.gov.pix0136ttmtkktnkzwlkjteiard@supabase.co5204000053039865405${total.toFixed(2)}5802BR5914MaestriaBeach6008Fortaleza62070503***6304FC3A`}
+                      style={{
+                        width: '100%',
+                        fontSize: '0.55rem',
+                        fontFamily: 'monospace',
+                        color: 'var(--text-muted)',
+                        padding: '4px',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '4px',
+                        resize: 'none',
+                        height: '40px'
+                      }}
+                    />
                   </div>
                 )}
 
-                {/* Ações de Fechamento */}
+                {/* Ações */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <button
                     onClick={() => setShowReceipt(true)}
                     className="btn btn-outline"
-                    style={{ width: '100%' }}
+                    style={{ width: '100%', borderRadius: '12px' }}
                   >
                     <Receipt size={16} /> Ver Recibo Digital
                   </button>
@@ -358,8 +471,8 @@ export const CashierPanel: React.FC<CashierPanelProps> = ({
                   <button
                     onClick={handleCloseTable}
                     className="btn btn-primary"
-                    style={{ width: '100%', padding: '0.9rem', fontSize: '1rem', gap: '0.5rem' }}
-                    disabled={!paymentMethod}
+                    style={{ width: '100%', padding: '0.9rem', fontSize: '1rem', gap: '0.5rem', borderRadius: '12px' }}
+                    disabled={!paymentMethod || (paymentMethod === 'cash' && paidAmount < total)}
                   >
                     <Check size={18} /> Fechar Caixa da Mesa
                   </button>
@@ -377,10 +490,10 @@ export const CashierPanel: React.FC<CashierPanelProps> = ({
         </div>
       </main>
 
-      {/* MODAL: RECIBO DIGITAL SIMULADO */}
+      {/* MODAL: RECIBO DIGITAL */}
       {showReceipt && selectedOrder && (
         <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: '400px', fontFamily: 'monospace' }}>
+          <div className="modal-content" style={{ maxWidth: '400px', fontFamily: 'monospace', borderRadius: '16px' }}>
             <div className="modal-header" style={{ fontFamily: 'var(--font-title)' }}>
               <h3>Cupom Não Fiscal</h3>
               <button onClick={() => setShowReceipt(false)} className="btn btn-ghost">×</button>
@@ -428,7 +541,7 @@ export const CashierPanel: React.FC<CashierPanelProps> = ({
             </div>
 
             <div className="modal-footer" style={{ fontFamily: 'var(--font-title)' }}>
-              <button onClick={() => setShowReceipt(false)} className="btn btn-primary" style={{ width: '100%' }}>Ok, Fechar Recibo</button>
+              <button onClick={() => setShowReceipt(false)} className="btn btn-primary" style={{ width: '100%', borderRadius: '12px' }}>Ok, Fechar Recibo</button>
             </div>
           </div>
         </div>

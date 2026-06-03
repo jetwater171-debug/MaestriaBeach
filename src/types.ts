@@ -24,6 +24,7 @@ export interface StoreInfo {
   phone?: string;
   tablesCount: number;
   serviceChargePercent: number; // ex: 10%
+  tenantCode?: string; // Código de login rápido da equipe
 }
 
 export type OrderItemStatus = 'pending' | 'preparing' | 'ready' | 'delivered';

@@ -4,17 +4,212 @@ import { StoreInfo, MenuItem, Employee, Order, OrderItem, DailySale } from './ty
 // Retorna se o Supabase está ativo para uso
 export const checkSupabase = () => isSupabaseConfigured && supabase !== null;
 
-// Buscar informações da loja (por simplicidade, pegamos a primeira cadastrada)
-export const fetchStoreInfo = async (): Promise<StoreInfo | null> => {
+// ==========================================
+// FLUXOS DE AUTENTICAÇÃO SAAS (MULTI-TENANT)
+// ==========================================
+
+// 1. Cadastrar nova barraca de praia (Store + Admin Employee + Cardápio padrão)
+export const registerNewStore = async (
+  name: string,
+  tenantCode: string,
+  email: string,
+  passwordStr: string
+): Promise<{ store: StoreInfo; employee: Employee; storeId: string } | null> => {
+  if (!checkSupabase()) return null;
+
+  try {
+    // 1. Inserir a loja
+    const { data: storeData, error: storeError } = await supabase!
+      .from('stores')
+      .insert([{
+        name: name,
+        tenant_code: tenantCode.toUpperCase().trim(),
+        owner_email: email.toLowerCase().trim(),
+        owner_password: passwordStr,
+        tables_count: 15,
+        service_charge_percent: 10.00,
+        logo_url: '🏖️'
+      }])
+      .select()
+      .single();
+
+    if (storeError) {
+      console.error('Erro ao cadastrar barraca no Supabase:', storeError);
+      throw new Error(storeError.message.includes('unique') ? 'Este código de barraca ou e-mail já está sendo usado.' : storeError.message);
+    }
+
+    const storeId = storeData.id;
+
+    // 2. Inserir Dono administrativo padrão na equipe
+    const { data: empData, error: empError } = await supabase!
+      .from('employees')
+      .insert([{
+        store_id: storeId,
+        name: 'Dono (Administrador)',
+        role: 'cashier',
+        pin: '0000'
+      }])
+      .select()
+      .single();
+
+    if (empError) {
+      console.error('Erro ao cadastrar funcionário administrador:', empError);
+      throw empError;
+    }
+
+    // 3. Inserir itens padrão de cardápio para facilitar no onboarding do lojista
+    const defaultItems = [
+      { store_id: storeId, name: 'Água de Coco Gelada', price: 8.00, description: 'Coco verde natural colhido no dia.', category: 'Bebidas', image_url: '🥥', is_available: true, is_promotion: false },
+      { store_id: storeId, name: 'Caipirinha Tradicional', price: 18.00, description: 'Cachaça artesanal, limão e bastante gelo.', category: 'Bebidas', image_url: '🍹', is_available: true, is_promotion: true, promotional_price: 15.00 },
+      { store_id: storeId, name: 'Isca de Peixe Crocante', price: 55.00, description: 'Empanado no panko com molho tártaro.', category: 'Petiscos', image_url: '🐟', is_available: true, is_promotion: false },
+      { store_id: storeId, name: 'Camarão ao Alho e Óleo', price: 69.00, description: 'Camarões inteiros dourados no azeite com alho.', category: 'Petiscos', image_url: '🍤', is_available: true, is_promotion: false },
+      { store_id: storeId, name: 'Pastel de Queijo Coalho', price: 24.00, description: '6 unidades de mini pastéis crocantes.', category: 'Petiscos', image_url: '🥟', is_available: true, is_promotion: false },
+      { store_id: storeId, name: 'Batata Frita Rústica', price: 28.00, description: 'Porção rústica com alecrim.', category: 'Petiscos', image_url: '🍟', is_available: true, is_promotion: false }
+    ];
+
+    await supabase!.from('menu_items').insert(defaultItems);
+
+    return {
+      store: {
+        name: storeData.name,
+        logoUrl: storeData.logo_url,
+        address: storeData.address,
+        phone: storeData.phone,
+        tablesCount: storeData.tables_count,
+        serviceChargePercent: Number(storeData.service_charge_percent)
+      },
+      employee: {
+        id: empData.id,
+        name: empData.name,
+        role: empData.role as any,
+        pin: empData.pin
+      },
+      storeId: storeId
+    };
+  } catch (err: any) {
+    alert(err.message || 'Erro durante o cadastro.');
+    return null;
+  }
+};
+
+// 2. Login do Dono (E-mail e Senha)
+export const loginOwner = async (
+  email: string,
+  passwordStr: string
+): Promise<{ store: StoreInfo; employee: Employee; storeId: string } | null> => {
+  if (!checkSupabase()) return null;
+
+  const { data: storeData, error: storeError } = await supabase!
+    .from('stores')
+    .select('*')
+    .eq('owner_email', email.toLowerCase().trim())
+    .eq('owner_password', passwordStr)
+    .maybeSingle();
+
+  if (storeError || !storeData) {
+    console.error('Erro de autenticação do dono:', storeError);
+    return null;
+  }
+
+  // Busca o funcionário do Dono administrativo
+  const { data: empData, error: empError } = await supabase!
+    .from('employees')
+    .select('*')
+    .eq('store_id', storeData.id)
+    .eq('pin', '0000')
+    .single();
+
+  if (empError) {
+    console.error('Erro ao carregar credencial de administrador:', empError);
+    return null;
+  }
+
+  return {
+    store: {
+      name: storeData.name,
+      logoUrl: storeData.logo_url,
+      address: storeData.address,
+      phone: storeData.phone,
+      tablesCount: storeData.tables_count,
+      serviceChargePercent: Number(storeData.service_charge_percent),
+      tenantCode: storeData.tenant_code // Exibe o código no painel
+    },
+    employee: {
+      id: empData.id,
+      name: empData.name,
+      role: empData.role as any,
+      pin: empData.pin
+    },
+    storeId: storeData.id
+  };
+};
+
+// 3. Login de Funcionário (Código da Barraca + PIN de 4 dígitos)
+export const loginEmployee = async (
+  tenantCode: string,
+  pin: string
+): Promise<{ store: StoreInfo; employee: Employee; storeId: string } | null> => {
+  if (!checkSupabase()) return null;
+
+  // Busca a loja pelo código do inquilino
+  const { data: storeData, error: storeError } = await supabase!
+    .from('stores')
+    .select('*')
+    .eq('tenant_code', tenantCode.toUpperCase().trim())
+    .maybeSingle();
+
+  if (storeError || !storeData) {
+    console.error('Barraca não encontrada pelo código informado:', storeError);
+    return null;
+  }
+
+  // Busca o funcionário na loja correspondente com o PIN fornecido
+  const { data: empData, error: empError } = await supabase!
+    .from('employees')
+    .select('*')
+    .eq('store_id', storeData.id)
+    .eq('pin', pin)
+    .maybeSingle();
+
+  if (empError || !empData) {
+    console.error('Funcionário não cadastrado com este PIN nesta barraca:', empError);
+    return null;
+  }
+
+  return {
+    store: {
+      name: storeData.name,
+      logoUrl: storeData.logo_url,
+      address: storeData.address,
+      phone: storeData.phone,
+      tablesCount: storeData.tables_count,
+      serviceChargePercent: Number(storeData.service_charge_percent)
+    },
+    employee: {
+      id: empData.id,
+      name: empData.name,
+      role: empData.role as any,
+      pin: empData.pin
+    },
+    storeId: storeData.id
+  };
+};
+
+// ==========================================
+// FUNÇÕES DE BUSCA E EDIÇÃO POR STORE_ID
+// ==========================================
+
+// Buscar informações da loja por ID
+export const fetchStoreInfo = async (storeId: string): Promise<StoreInfo | null> => {
   if (!checkSupabase()) return null;
   const { data, error } = await supabase!
     .from('stores')
     .select('*')
-    .limit(1)
+    .eq('id', storeId)
     .single();
 
   if (error) {
-    console.error('Erro ao buscar dados da loja no Supabase:', error);
+    console.error('Erro ao buscar dados da loja:', error);
     return null;
   }
   
@@ -24,16 +219,14 @@ export const fetchStoreInfo = async (): Promise<StoreInfo | null> => {
     address: data.address,
     phone: data.phone,
     tablesCount: data.tables_count,
-    serviceChargePercent: Number(data.service_charge_percent)
+    serviceChargePercent: Number(data.service_charge_percent),
+    tenantCode: data.tenant_code
   };
 };
 
 // Atualizar dados da loja
-export const updateStoreInfoSupabase = async (info: StoreInfo): Promise<boolean> => {
+export const updateStoreInfoSupabase = async (storeId: string, info: StoreInfo): Promise<boolean> => {
   if (!checkSupabase()) return false;
-  // Pegamos a primeira loja para atualizar
-  const { data: stores } = await supabase!.from('stores').select('id').limit(1);
-  if (!stores || stores.length === 0) return false;
 
   const { error } = await supabase!
     .from('stores')
@@ -45,7 +238,7 @@ export const updateStoreInfoSupabase = async (info: StoreInfo): Promise<boolean>
       tables_count: info.tablesCount,
       service_charge_percent: info.serviceChargePercent
     })
-    .eq('id', stores[0].id);
+    .eq('id', storeId);
 
   if (error) {
     console.error('Erro ao atualizar loja:', error);
@@ -54,12 +247,13 @@ export const updateStoreInfoSupabase = async (info: StoreInfo): Promise<boolean>
   return true;
 };
 
-// Buscar cardápio
-export const fetchMenuItems = async (): Promise<MenuItem[]> => {
+// Buscar cardápio da loja
+export const fetchMenuItems = async (storeId: string): Promise<MenuItem[]> => {
   if (!checkSupabase()) return [];
   const { data, error } = await supabase!
     .from('menu_items')
-    .select('*');
+    .select('*')
+    .eq('store_id', storeId);
 
   if (error) {
     console.error('Erro ao buscar cardápio:', error);
@@ -79,17 +273,14 @@ export const fetchMenuItems = async (): Promise<MenuItem[]> => {
   }));
 };
 
-// Adicionar item ao cardápio
-export const addMenuItemSupabase = async (item: Omit<MenuItem, 'id'>): Promise<MenuItem | null> => {
+// Adicionar item ao cardápio da loja
+export const addMenuItemSupabase = async (storeId: string, item: Omit<MenuItem, 'id'>): Promise<MenuItem | null> => {
   if (!checkSupabase()) return null;
-  
-  const { data: stores } = await supabase!.from('stores').select('id').limit(1);
-  if (!stores || stores.length === 0) return null;
 
   const { data, error } = await supabase!
     .from('menu_items')
     .insert([{
-      store_id: stores[0].id,
+      store_id: storeId,
       name: item.name,
       price: item.price,
       description: item.description,
@@ -131,12 +322,13 @@ export const deleteMenuItemSupabase = async (id: string): Promise<boolean> => {
   return !error;
 };
 
-// Buscar funcionários
-export const fetchEmployees = async (): Promise<Employee[]> => {
+// Buscar funcionários da loja
+export const fetchEmployees = async (storeId: string): Promise<Employee[]> => {
   if (!checkSupabase()) return [];
   const { data, error } = await supabase!
     .from('employees')
-    .select('*');
+    .select('*')
+    .eq('store_id', storeId);
 
   if (error) {
     console.error('Erro ao buscar funcionários:', error);
@@ -151,16 +343,14 @@ export const fetchEmployees = async (): Promise<Employee[]> => {
   }));
 };
 
-// Adicionar funcionário
-export const addEmployeeSupabase = async (emp: Omit<Employee, 'id'>): Promise<Employee | null> => {
+// Adicionar funcionário na loja
+export const addEmployeeSupabase = async (storeId: string, emp: Omit<Employee, 'id'>): Promise<Employee | null> => {
   if (!checkSupabase()) return null;
-  const { data: stores } = await supabase!.from('stores').select('id').limit(1);
-  if (!stores || stores.length === 0) return null;
 
   const { data, error } = await supabase!
     .from('employees')
     .insert([{
-      store_id: stores[0].id,
+      store_id: storeId,
       name: emp.name,
       role: emp.role,
       pin: emp.pin
@@ -192,14 +382,14 @@ export const deleteEmployeeSupabase = async (id: string): Promise<boolean> => {
   return !error;
 };
 
-// Buscar todos os pedidos ativos e itens
-export const fetchOrders = async (): Promise<Order[]> => {
+// Buscar pedidos da loja
+export const fetchOrders = async (storeId: string): Promise<Order[]> => {
   if (!checkSupabase()) return [];
   
-  // Buscar pedidos ativos ou completados recentes
   const { data: ordersData, error: ordersError } = await supabase!
     .from('orders')
-    .select('*, order_items(*)');
+    .select('*, order_items(*)')
+    .eq('store_id', storeId);
 
   if (ordersError) {
     console.error('Erro ao buscar pedidos:', ordersError);
@@ -232,18 +422,15 @@ export const fetchOrders = async (): Promise<Order[]> => {
   }));
 };
 
-// Adicionar novo pedido com itens
-export const addOrderSupabase = async (order: Order): Promise<boolean> => {
+// Adicionar pedido na loja
+export const addOrderSupabase = async (storeId: string, order: Order): Promise<boolean> => {
   if (!checkSupabase()) return false;
-  
-  const { data: stores } = await supabase!.from('stores').select('id').limit(1);
-  if (!stores || stores.length === 0) return false;
 
   const { data: newOrder, error: orderError } = await supabase!
     .from('orders')
     .insert([{
       id: order.id,
-      store_id: stores[0].id,
+      store_id: storeId,
       table_number: order.tableNumber,
       waiter_id: order.waiterId || null,
       waiter_name: order.waiterName,
@@ -251,7 +438,8 @@ export const addOrderSupabase = async (order: Order): Promise<boolean> => {
       subtotal: order.subtotal,
       service_charge: order.serviceCharge,
       discount: order.discount,
-      total: order.total
+      total: order.total,
+      created_at: order.createdAt
     }])
     .select()
     .single();
@@ -261,7 +449,6 @@ export const addOrderSupabase = async (order: Order): Promise<boolean> => {
     return false;
   }
 
-  // Inserir os itens do pedido
   const itemsToInsert = order.items.map(item => ({
     order_id: newOrder.id,
     menu_item_id: item.menuItemId || null,
@@ -285,11 +472,10 @@ export const addOrderSupabase = async (order: Order): Promise<boolean> => {
   return true;
 };
 
-// Atualizar pedido (itens adicionados ou status alterados)
-export const updateOrderSupabase = async (order: Order): Promise<boolean> => {
+// Atualizar pedido na loja
+export const updateOrderSupabase = async (storeId: string, order: Order): Promise<boolean> => {
   if (!checkSupabase()) return false;
 
-  // Atualiza dados da ordem principal (subtotal, etc.)
   const { error: orderError } = await supabase!
     .from('orders')
     .update({
@@ -308,13 +494,11 @@ export const updateOrderSupabase = async (order: Order): Promise<boolean> => {
     return false;
   }
 
-  // Para itens, inserimos ou atualizamos
-  // Para simplificar: deletamos os order_items existentes e inserimos a lista atualizada
-  // (Isso é extremamente seguro para mock/MVP e evita conflitos de chaves)
+  // Substitui itens
   await supabase!.from('order_items').delete().eq('order_id', order.id);
 
   const itemsToInsert = order.items.map(item => ({
-    id: item.id.startsWith('oi_') ? undefined : item.id, // Se for temporário, deixa o Supabase gerar uuid
+    id: item.id.startsWith('oi_') ? undefined : item.id,
     order_id: order.id,
     menu_item_id: item.menuItemId,
     name: item.name,
@@ -337,14 +521,14 @@ export const updateOrderSupabase = async (order: Order): Promise<boolean> => {
   return true;
 };
 
-// Registrar fechamento de caixa e gerar dados de vendas agregados
-export const fetchSalesSupabase = async (): Promise<DailySale[]> => {
+// Buscar faturamento agregados da loja
+export const fetchSalesSupabase = async (storeId: string): Promise<DailySale[]> => {
   if (!checkSupabase()) return [];
 
-  // Puxar pedidos com status 'completed' e agrupar por data
   const { data, error } = await supabase!
     .from('orders')
     .select('*')
+    .eq('store_id', storeId)
     .eq('status', 'completed');
 
   if (error) {
@@ -352,7 +536,6 @@ export const fetchSalesSupabase = async (): Promise<DailySale[]> => {
     return [];
   }
 
-  // Agrupamento manual para gerar a estrutura de DailySale exigida no dashboard
   const groups: Record<string, DailySale> = {};
 
   data.forEach(order => {

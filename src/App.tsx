@@ -44,40 +44,64 @@ function App() {
   const [orders, setOrders] = useState<Order[]>(() => getOrders());
   const [sales, setSales] = useState<DailySale[]>(() => getSales());
 
-  // Estados de navegação e sessão
+  // Estados de navegação, sessão e SaaS tenant
+  const [currentStoreId, setCurrentStoreId] = useState<string>('local');
   const [user, setUser] = useState<Employee | null>(null);
   const [currentRole, setCurrentRole] = useState<'login' | 'owner' | 'waiter' | 'kitchen' | 'cashier'>('login');
   
-  // Estado para indicar qual conexão está ativa
+  // Estado de conexão ativa
   const [dbMode, setDbMode] = useState<'supabase' | 'local'>('local');
 
-  // 1. Carregar dados iniciais
+  // Auxiliar para carregar dados de uma loja do Supabase sob demanda
+  const loadStoreData = async (storeId: string) => {
+    try {
+      const items = await fetchMenuItems(storeId);
+      setMenuItems(items);
+
+      const emps = await fetchEmployees(storeId);
+      setEmployees(emps);
+
+      const ords = await fetchOrders(storeId);
+      setOrders(ords);
+
+      const sls = await fetchSalesSupabase(storeId);
+      setSales(sls);
+    } catch (e) {
+      console.error('Erro ao carregar dados específicos do Supabase:', e);
+    }
+  };
+
+  // 1. Carregar dados iniciais e restaurar sessão (Auto-login)
   useEffect(() => {
-    const loadInitialData = async () => {
+    const loadSessionAndData = async () => {
       const isSupabaseActive = checkSupabase();
       
       if (isSupabaseActive) {
         setDbMode('supabase');
-        try {
-          console.log('Carregando dados iniciais do Supabase...');
-          const store = await fetchStoreInfo();
-          if (store) setStoreInfo(store);
+        
+        // Tentar restaurar sessão
+        const cachedStoreId = localStorage.getItem('mb_session_store_id');
+        const cachedEmpStr = localStorage.getItem('mb_session_employee');
+        const cachedStoreInfoStr = localStorage.getItem('mb_session_store_info');
+        const cachedRole = localStorage.getItem('mb_session_role');
 
-          const items = await fetchMenuItems();
-          if (items.length > 0) setMenuItems(items);
+        if (cachedStoreId && cachedEmpStr && cachedStoreInfoStr && cachedRole) {
+          try {
+            const sId = cachedStoreId;
+            const emp = JSON.parse(cachedEmpStr);
+            const sInfo = JSON.parse(cachedStoreInfoStr);
+            
+            setCurrentStoreId(sId);
+            setUser(emp);
+            setStoreInfo(sInfo);
+            setCurrentRole(cachedRole as any);
 
-          const emps = await fetchEmployees();
-          if (emps.length > 0) setEmployees(emps);
-
-          const ords = await fetchOrders();
-          setOrders(ords);
-
-          const sls = await fetchSalesSupabase();
-          setSales(sls);
-        } catch (e) {
-          console.error('Erro de conexão ao carregar Supabase. Utilizando fallback LocalStorage.', e);
-          setDbMode('local');
-          loadLocalFallback();
+            // Puxa dados da loja conectada
+            await loadStoreData(sId);
+          } catch (err) {
+            console.error('Erro ao restaurar sessão cacheada:', err);
+            loadLocalFallback();
+          }
         }
       } else {
         setDbMode('local');
@@ -94,50 +118,61 @@ function App() {
       setSales(getSales());
     };
 
-    loadInitialData();
+    loadSessionAndData();
   }, []);
 
   // 2. Ouvintes em Tempo Real (Supabase Realtime WebSockets)
   useEffect(() => {
-    if (dbMode !== 'supabase' || !supabase) return;
+    if (dbMode !== 'supabase' || !supabase || currentStoreId === 'local') return;
 
-    console.log('Registrando canais Supabase Realtime para sincronização automática...');
+    console.log(`Registrando canais Supabase Realtime para a loja: ${currentStoreId}`);
 
     // Canal para Pedidos e Itens
     const ordersChannel = supabase
-      .channel('orders-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, async () => {
-        console.log('Realtime: Mudança nos Pedidos detectada.');
-        const ords = await fetchOrders();
-        setOrders(ords);
-        const sls = await fetchSalesSupabase();
-        setSales(sls);
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, async () => {
-        console.log('Realtime: Mudança nos Itens de Pedido detectada.');
-        const ords = await fetchOrders();
-        setOrders(ords);
-      })
+      .channel(`orders-${currentStoreId}`)
+      .on(
+        'postgres_changes', 
+        { event: '*', schema: 'public', table: 'orders', filter: `store_id=eq.${currentStoreId}` }, 
+        async () => {
+          console.log('Realtime: Atualização de Pedido recebida.');
+          setOrders(await fetchOrders(currentStoreId));
+          setSales(await fetchSalesSupabase(currentStoreId));
+        }
+      )
+      .on(
+        'postgres_changes', 
+        { event: '*', schema: 'public', table: 'order_items' }, // Escuta geral (filtro local em fetchOrders)
+        async () => {
+          console.log('Realtime: Atualização de Itens de Pedido recebida.');
+          setOrders(await fetchOrders(currentStoreId));
+        }
+      )
       .subscribe();
 
     // Canal para Cardápio
     const menuChannel = supabase
-      .channel('menu-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, async () => {
-        console.log('Realtime: Mudança no Cardápio detectada.');
-        const items = await fetchMenuItems();
-        setMenuItems(items);
-      })
+      .channel(`menu-${currentStoreId}`)
+      .on(
+        'postgres_changes', 
+        { event: '*', schema: 'public', table: 'menu_items', filter: `store_id=eq.${currentStoreId}` }, 
+        async () => {
+          console.log('Realtime: Atualização do Cardápio recebida.');
+          setMenuItems(await fetchMenuItems(currentStoreId));
+        }
+      )
       .subscribe();
 
     // Canal para Funcionários
     const employeesChannel = supabase
-      .channel('employees-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'employees' }, async () => {
-        console.log('Realtime: Mudança nos Funcionários detectada.');
-        const emps = await fetchEmployees();
-        setEmployees(emps);
-      })
+      .channel(`employees-${currentStoreId}`)
+      .on(
+        'postgres_changes', 
+        { event: '*', schema: 'public', table: 'employees', filter: `store_id=eq.${currentStoreId}` }, 
+        async () => {
+          console.log('Realtime: Atualização de Funcionários recebida.');
+          setEmployees(await fetchEmployees(currentStoreId));
+        }
+      )
       .subscribe();
 
     return () => {
@@ -146,9 +181,9 @@ function App() {
       supabase?.removeChannel(menuChannel);
       supabase?.removeChannel(employeesChannel);
     };
-  }, [dbMode]);
+  }, [dbMode, currentStoreId]);
 
-  // 3. Sincronização entre abas (LocalStorage fallback)
+  // 3. Sincronização de abas do LocalStorage (Modo offline)
   useEffect(() => {
     if (dbMode === 'supabase') return;
 
@@ -166,14 +201,11 @@ function App() {
 
   // Forçar recarga manual
   const forceSync = async () => {
-    if (dbMode === 'supabase') {
-      const store = await fetchStoreInfo();
+    if (dbMode === 'supabase' && currentStoreId !== 'local') {
+      const store = await fetchStoreInfo(currentStoreId);
       if (store) setStoreInfo(store);
-      setMenuItems(await fetchMenuItems());
-      setEmployees(await fetchEmployees());
-      setOrders(await fetchOrders());
-      setSales(await fetchSalesSupabase());
-      console.log('Sincronização forçada com o Supabase efetuada!');
+      await loadStoreData(currentStoreId);
+      console.log('Sincronização manual do Supabase finalizada!');
     } else {
       setStoreInfo(getStoreInfo());
       setMenuItems(getMenuItems());
@@ -183,25 +215,49 @@ function App() {
     }
   };
 
-  // Autenticação
-  const handleLoginSuccess = (employee: Employee, selectedRoleOverride?: 'owner' | 'waiter' | 'kitchen' | 'cashier') => {
+  // Login com persistência de sessão
+  const handleLoginSuccess = (
+    employee: Employee, 
+    selectedRoleOverride?: 'owner' | 'waiter' | 'kitchen' | 'cashier',
+    storeData?: StoreInfo,
+    storeId?: string
+  ) => {
+    const activeStoreId = storeId || 'local';
+    const activeStoreInfo = storeData || getStoreInfo();
+    const activeRole = selectedRoleOverride || employee.role;
+
+    setCurrentStoreId(activeStoreId);
     setUser(employee);
-    if (selectedRoleOverride) {
-      setCurrentRole(selectedRoleOverride);
-    } else {
-      setCurrentRole(employee.role);
+    setStoreInfo(activeStoreInfo);
+    setCurrentRole(activeRole);
+
+    // Salva sessão localmente para persistir recarga de página na Vercel
+    localStorage.setItem('mb_session_store_id', activeStoreId);
+    localStorage.setItem('mb_session_employee', JSON.stringify(employee));
+    localStorage.setItem('mb_session_store_info', JSON.stringify(activeStoreInfo));
+    localStorage.setItem('mb_session_role', activeRole);
+
+    // Carregar dados específicos da loja
+    if (activeStoreId !== 'local' && dbMode === 'supabase') {
+      loadStoreData(activeStoreId);
     }
   };
 
+  // Logout com limpeza da sessão cacheada
   const handleLogout = () => {
     setUser(null);
     setCurrentRole('login');
+    setCurrentStoreId('local');
+    localStorage.removeItem('mb_session_store_id');
+    localStorage.removeItem('mb_session_employee');
+    localStorage.removeItem('mb_session_store_info');
+    localStorage.removeItem('mb_session_role');
   };
 
-  // Ações de Alteração de Dados
+  // Escritas de Dados no Banco / LocalStorage
   const handleUpdateStoreInfo = async (info: StoreInfo) => {
-    if (dbMode === 'supabase') {
-      await updateStoreInfoSupabase(info);
+    if (dbMode === 'supabase' && currentStoreId !== 'local') {
+      await updateStoreInfoSupabase(currentStoreId, info);
     } else {
       saveStoreInfo(info);
     }
@@ -209,17 +265,15 @@ function App() {
   };
 
   const handleUpdateMenuItems = async (items: MenuItem[]) => {
-    if (dbMode === 'supabase') {
+    if (dbMode === 'supabase' && currentStoreId !== 'local') {
       if (items.length < menuItems.length) {
-        // Exclusão
         const deletedItem = menuItems.find(mi => !items.some(i => i.id === mi.id));
         if (deletedItem) await deleteMenuItemSupabase(deletedItem.id);
       } else if (items.length > menuItems.length) {
-        // Inserção
         const newItem = items.find(mi => !menuItems.some(i => i.id === mi.id));
-        if (newItem) await addMenuItemSupabase(newItem);
+        if (newItem) await addMenuItemSupabase(currentStoreId, newItem);
       }
-      setMenuItems(await fetchMenuItems());
+      setMenuItems(await fetchMenuItems(currentStoreId));
     } else {
       saveMenuItems(items);
       setMenuItems(items);
@@ -227,17 +281,15 @@ function App() {
   };
 
   const handleUpdateEmployees = async (emps: Employee[]) => {
-    if (dbMode === 'supabase') {
+    if (dbMode === 'supabase' && currentStoreId !== 'local') {
       if (emps.length < employees.length) {
-        // Exclusão
         const deleted = employees.find(e => !emps.some(i => i.id === e.id));
         if (deleted) await deleteEmployeeSupabase(deleted.id);
       } else if (emps.length > employees.length) {
-        // Inserção
         const added = emps.find(e => !employees.some(i => i.id === e.id));
-        if (added) await addEmployeeSupabase(added);
+        if (added) await addEmployeeSupabase(currentStoreId, added);
       }
-      setEmployees(await fetchEmployees());
+      setEmployees(await fetchEmployees(currentStoreId));
     } else {
       saveEmployees(emps);
       setEmployees(emps);
@@ -245,9 +297,9 @@ function App() {
   };
 
   const handleAddOrder = async (order: Order) => {
-    if (dbMode === 'supabase') {
-      await addOrderSupabase(order);
-      setOrders(await fetchOrders());
+    if (dbMode === 'supabase' && currentStoreId !== 'local') {
+      await addOrderSupabase(currentStoreId, order);
+      setOrders(await fetchOrders(currentStoreId));
     } else {
       const updated = [...orders, order];
       saveOrders(updated);
@@ -256,9 +308,9 @@ function App() {
   };
 
   const handleUpdateOrder = async (updatedOrder: Order) => {
-    if (dbMode === 'supabase') {
-      await updateOrderSupabase(updatedOrder);
-      setOrders(await fetchOrders());
+    if (dbMode === 'supabase' && currentStoreId !== 'local') {
+      await updateOrderSupabase(currentStoreId, updatedOrder);
+      setOrders(await fetchOrders(currentStoreId));
     } else {
       const updated = orders.map(o => o.id === updatedOrder.id ? updatedOrder : o);
       saveOrders(updated);
@@ -276,36 +328,25 @@ function App() {
     const originalOrder = orders.find(o => o.id === orderId);
     if (!originalOrder) return;
 
-    if (dbMode === 'supabase') {
-      const closedOrder: Order = {
-        ...originalOrder,
-        status: 'completed',
-        paymentMethod,
-        discount,
-        serviceCharge,
-        total,
-        completedAt: new Date().toISOString()
-      };
-      
-      await updateOrderSupabase(closedOrder);
-      setOrders(await fetchOrders());
-      setSales(await fetchSalesSupabase());
-    } else {
-      const closedOrder: Order = {
-        ...originalOrder,
-        status: 'completed',
-        paymentMethod,
-        discount,
-        serviceCharge,
-        total,
-        completedAt: new Date().toISOString()
-      };
+    const closedOrder: Order = {
+      ...originalOrder,
+      status: 'completed',
+      paymentMethod,
+      discount,
+      serviceCharge,
+      total,
+      completedAt: new Date().toISOString()
+    };
 
+    if (dbMode === 'supabase' && currentStoreId !== 'local') {
+      await updateOrderSupabase(currentStoreId, closedOrder);
+      setOrders(await fetchOrders(currentStoreId));
+      setSales(await fetchSalesSupabase(currentStoreId));
+    } else {
       const updatedOrders = orders.map(o => o.id === orderId ? closedOrder : o);
       saveOrders(updatedOrders);
       setOrders(updatedOrders);
 
-      // Registrar vendas diárias locais
       const currentSales = getSales();
       const todayStr = new Date().toLocaleDateString('pt-BR');
       const todayIndex = currentSales.findIndex(
@@ -337,7 +378,7 @@ function App() {
 
   return (
     <div>
-      {/* Barra de Simulação */}
+      {/* Barra de Simulação do Demo */}
       {currentRole !== 'login' && (
         <div style={{
           backgroundColor: '#0F172A',
@@ -367,7 +408,7 @@ function App() {
               fontWeight: 700,
               marginLeft: '10px'
             }}>
-              <Database size={10} /> {dbMode === 'supabase' ? 'Supabase Realtime' : 'LocalStorage Offline'}
+              <Database size={10} /> {dbMode === 'supabase' ? 'Supabase SaaS' : 'LocalStorage Offline'}
             </span>
           </div>
 
@@ -487,6 +528,7 @@ function App() {
         <KitchenPanel 
           kitchenUser={user}
           orders={orders}
+          menuItems={menuItems}
           onUpdateOrder={handleUpdateOrder}
           onLogout={handleLogout}
         />
