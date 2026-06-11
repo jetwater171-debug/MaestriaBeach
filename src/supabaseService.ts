@@ -556,21 +556,31 @@ export const fetchOrders = async (storeId: string): Promise<Order[]> => {
 export const addOrderSupabase = async (storeId: string, order: Order): Promise<boolean> => {
   if (!checkSupabase()) return false;
 
+  const isUUID = (str: string | undefined | null): boolean => {
+    if (!str) return false;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+  };
+
+  const insertData: any = {
+    store_id: storeId,
+    table_number: order.tableNumber,
+    waiter_id: isUUID(order.waiterId) ? order.waiterId : null,
+    waiter_name: order.waiterName,
+    status: order.status,
+    subtotal: order.subtotal,
+    service_charge: order.serviceCharge,
+    discount: order.discount,
+    total: order.total,
+    created_at: order.createdAt
+  };
+
+  if (isUUID(order.id)) {
+    insertData.id = order.id;
+  }
+
   const { data: newOrder, error: orderError } = await supabase!
     .from('orders')
-    .insert([{
-      id: order.id,
-      store_id: storeId,
-      table_number: order.tableNumber,
-      waiter_id: order.waiterId || null,
-      waiter_name: order.waiterName,
-      status: order.status,
-      subtotal: order.subtotal,
-      service_charge: order.serviceCharge,
-      discount: order.discount,
-      total: order.total,
-      created_at: order.createdAt
-    }])
+    .insert([insertData])
     .select()
     .single();
 
@@ -581,7 +591,7 @@ export const addOrderSupabase = async (storeId: string, order: Order): Promise<b
 
   const itemsToInsert = order.items.map(item => ({
     order_id: newOrder.id,
-    menu_item_id: item.menuItemId || null,
+    menu_item_id: isUUID(item.menuItemId) ? item.menuItemId : null,
     name: item.name,
     price: item.price,
     quantity: item.quantity,
@@ -606,6 +616,11 @@ export const addOrderSupabase = async (storeId: string, order: Order): Promise<b
 export const updateOrderSupabase = async (storeId: string, order: Order): Promise<boolean> => {
   if (!checkSupabase()) return false;
 
+  const isUUID = (str: string | undefined | null): boolean => {
+    if (!str) return false;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+  };
+
   const { error: orderError } = await supabase!
     .from('orders')
     .update({
@@ -628,9 +643,9 @@ export const updateOrderSupabase = async (storeId: string, order: Order): Promis
   await supabase!.from('order_items').delete().eq('order_id', order.id);
 
   const itemsToInsert = order.items.map(item => ({
-    id: item.id.startsWith('oi_') ? undefined : item.id,
+    id: (item.id && item.id.startsWith('oi_')) ? undefined : (isUUID(item.id) ? item.id : undefined),
     order_id: order.id,
-    menu_item_id: item.menuItemId,
+    menu_item_id: isUUID(item.menuItemId) ? item.menuItemId : null,
     name: item.name,
     price: item.price,
     quantity: item.quantity,

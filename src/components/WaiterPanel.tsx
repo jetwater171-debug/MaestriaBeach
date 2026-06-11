@@ -21,6 +21,14 @@ interface WaiterPanelProps {
 
 type SubTabType = 'tables' | 'new-order' | 'my-orders';
 
+const generateUUID = (): string => {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+};
+
 export const WaiterPanel: React.FC<WaiterPanelProps> = ({
   waiter,
   storeInfo,
@@ -147,19 +155,15 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
   };
 
   const removeFromCart = (menuItemId: string) => {
-    if (!cart[menuItemId]) return;
-    
     setCart(prev => {
-      const updated = { ...prev };
-      if (updated[menuItemId].quantity <= 1) {
-        delete updated[menuItemId];
+      const next = { ...prev };
+      if (!next[menuItemId]) return prev;
+      if (next[menuItemId].quantity <= 1) {
+        delete next[menuItemId];
       } else {
-        updated[menuItemId] = {
-          ...updated[menuItemId],
-          quantity: updated[menuItemId].quantity - 1
-        };
+        next[menuItemId].quantity -= 1;
       }
-      return updated;
+      return next;
     });
   };
 
@@ -173,9 +177,8 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
     }));
   };
 
+  // Finalizar e enviar lançamentos
   const handleSendOrder = () => {
-    if (!selectedTable) return;
-    
     const cartEntries = Object.entries(cart);
     if (cartEntries.length === 0) {
       alert('Selecione pelo menos um item para enviar.');
@@ -186,7 +189,7 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
     const newItems: OrderItem[] = cartEntries.map(([itemId, cartItem]) => {
       const menuItem = menuItems.find(m => m.id === itemId)!;
       return {
-        id: 'oi_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+        id: generateUUID(),
         menuItemId: itemId,
         name: menuItem.name,
         price: menuItem.isPromotion && menuItem.promotionalPrice ? menuItem.promotionalPrice : menuItem.price,
@@ -206,12 +209,12 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
         items: updatedItems,
         subtotal
       });
-      alert(`Itens adicionados com sucesso à Mesa ${selectedTable}! 🍽9`);
+      alert(`Itens adicionados com sucesso à Mesa ${selectedTable}! 🍽️`);
     } else {
       const subtotal = newItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
       const newOrder: Order = {
-        id: 'ord_' + Date.now(),
-        tableNumber: selectedTable,
+        id: generateUUID(),
+        tableNumber: selectedTable!,
         waiterId: waiter.id,
         waiterName: waiter.name,
         items: newItems,

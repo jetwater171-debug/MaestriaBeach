@@ -112,13 +112,13 @@ export const Login: React.FC<LoginProps> = ({ employees, onLoginSuccess, storeNa
       // Fallback para LocalStorage se o Supabase não estiver ativado ou falhar
       // Para simular offline:
       const localStoreInfo = JSON.parse(localStorage.getItem('mb_store_info') || '{}');
-      const isLocalStore = tenantCode.toUpperCase() === 'MAES01' || tenantCode.toUpperCase() === localStoreInfo.tenantCode;
+      const isLocalStore = tenantCode.toUpperCase() === 'MAES01' || tenantCode.toUpperCase() === localStoreInfo.tenantCode?.toUpperCase();
       const localEmployee = employees.find(emp => emp.pin === pin);
       
       if (isLocalStore && localEmployee) {
         onLoginSuccess(localEmployee, undefined, localStoreInfo, 'local');
       } else {
-        setError('Barraca ou PIN incorretos. Tente MAES01 e PIN 1234.');
+        setError('Barraca ou PIN incorretos. Verifique suas credenciais.');
         setPin('');
       }
     }
@@ -237,7 +237,7 @@ export const Login: React.FC<LoginProps> = ({ employees, onLoginSuccess, storeNa
             { id: 'm3', name: 'Isca de Peixe Crocante', price: 55.00, description: 'Filé de peixe frito.', category: 'Petiscos', imageUrl: '🐟', isAvailable: true, isPromotion: false }
           ];
 
-      localStorage.setItem('mb_store_info', JSON.stringify({ ...finalStoreInfo, tenantCode: newTenantCode }));
+      localStorage.setItem('mb_store_info', JSON.stringify({ ...finalStoreInfo, tenantCode: newTenantCode.toUpperCase().trim() }));
       localStorage.setItem('mb_employees', JSON.stringify(newEmployeesList));
       localStorage.setItem('mb_menu_items', JSON.stringify(newMenuItemsList));
       localStorage.setItem('mb_orders', JSON.stringify([]));
@@ -300,54 +300,150 @@ export const Login: React.FC<LoginProps> = ({ employees, onLoginSuccess, storeNa
     if (file) {
       const url = URL.createObjectURL(file);
       setMenuImagePreview(url);
-      simulateMenuImageScan(newStoreName || 'Barraca Maestria');
+      runRealMenuImageScan(file);
     }
   };
 
-  const simulateMenuImageScan = (storeName: string) => {
+  const runRealMenuImageScan = async (file: File) => {
     setIsScanningMenu(true);
-    setScanProgress(0);
+    setScanProgress(5);
     setScanLogs([`🔍 [OCR] Inicializando Leitor de Cardápio com IA...`]);
 
-    const logs = [
-      `📸 [Scanner] Analisando contraste da imagem do cardápio...`,
-      `⚙️ [Segmentador] Detectando tabelas de pratos e preços...`,
-      `🤖 [Inteligência Artificial] Transcrevendo nomes de pratos e bebidas...`,
-      `🏷️ [Classificador] Mapeando categorias...`,
-      `💵 [Preços] Validando valores em Real (R$)...`,
-      `✨ [Resultado] 6 itens identificados no cardápio!`
-    ];
-
-    let currentLogIndex = 0;
-    const progressInterval = setInterval(() => {
-      setScanProgress(p => {
-        if (p >= 100) {
-          clearInterval(progressInterval);
-          return 100;
-        }
-        return p + 4;
-      });
-    }, 120);
-
-    const logInterval = setInterval(() => {
-      if (currentLogIndex < logs.length) {
-        setScanLogs(prev => [...prev, logs[currentLogIndex]]);
-        currentLogIndex++;
-      } else {
-        clearInterval(logInterval);
-        setIsScanningMenu(false);
-
-        const mockExtractedItems: Omit<MenuItem, 'id'>[] = [
-          { name: `Lagosta Grelhada ${storeName.split(' ')[0]}`, price: 145.00, description: 'Lagosta fresca grelhada com manteiga de ervas.', category: 'Petiscos', imageUrl: '🦞', isAvailable: true, isPromotion: false },
-          { name: 'Caipiroska de Caju e Mel', price: 22.00, description: 'Vodka, caju fresco e mel silvestre.', category: 'Bebidas', imageUrl: '🍹', isAvailable: true, isPromotion: false },
-          { name: 'Pastel de Camarão Especial', price: 29.00, description: 'Recheado com camarão cremoso e catupiry.', category: 'Petiscos', imageUrl: '🥟', isAvailable: true, isPromotion: false },
-          { name: 'Água de Coco Natural', price: 9.00, description: 'Coco gelado colhido na praia.', category: 'Bebidas', imageUrl: '🥥', isAvailable: true, isPromotion: false },
-          { name: 'Sorvete Artesanal de tapioca', price: 16.00, description: 'Tapioca com calda de melaço.', category: 'Sobremesas', imageUrl: '🍧', isAvailable: true, isPromotion: false },
-          { name: 'Porção Isca de Lula Crocante', price: 62.00, description: 'Anéis de lula fritos com molho tártaro.', category: 'Petiscos', imageUrl: '🐟', isAvailable: true, isPromotion: false }
-        ];
-        setOnboardingMenuItems(mockExtractedItems);
+    try {
+      const Tesseract = (window as any).Tesseract;
+      if (!Tesseract) {
+        throw new Error("A biblioteca Tesseract.js não foi carregada no navegador.");
       }
-    }, 500);
+
+      setScanLogs(prev => [...prev, `📸 [OCR] Carregando imagem e preparando reconhecimento...`]);
+      setScanProgress(15);
+
+      setScanLogs(prev => [...prev, `🤖 [IA] Reconhecendo texto e preços em português...`]);
+      setScanProgress(30);
+
+      // Executa o reconhecimento
+      const result = await Tesseract.recognize(
+        file,
+        'por',
+        {
+          logger: (m: any) => {
+            if (m.status === 'recognizing text') {
+              const progressPct = Math.min(95, Math.round(30 + m.progress * 60));
+              setScanProgress(progressPct);
+            }
+          }
+        }
+      );
+
+      const text = result.data.text || '';
+      setScanProgress(90);
+      setScanLogs(prev => [...prev, `🏷️ [IA] Analisando estrutura do cardápio e mapeando categorias...`]);
+
+      const lines = text.split('\n');
+      const extractedItems: Omit<MenuItem, 'id'>[] = [];
+
+      lines.forEach((line: string) => {
+        const cleanedLine = line.trim();
+        if (!cleanedLine || cleanedLine.length < 3) return;
+
+        // Expressão regular para encontrar o nome e o preço no final da linha
+        // Exemplo: "Caipirinha R$ 15,00" ou "Suco de Laranja 12.00" ou "Isca de Peixe... 50"
+        const match = cleanedLine.match(/(.*?)\s+(?:R\$?\s*)?(\d+(?:[.,]\d{1,2})?)\s*$/i);
+        if (match) {
+          let name = match[1].trim();
+          const priceStr = match[2].trim().replace(',', '.');
+          const price = parseFloat(priceStr);
+
+          // Limpar os pontinhos conectores clássicos de cardápio (ex: "Peixe Grelhado ...... 45.00")
+          name = name.replace(/[.\-_+=*~]{2,}/g, '').trim();
+
+          if (!name || isNaN(price) || price <= 0) return;
+
+          // Categorizar por palavra-chave
+          const nameLower = name.toLowerCase();
+          let category = 'Petiscos';
+          if (
+            nameLower.includes('bebida') || nameLower.includes('suco') || nameLower.includes('água') ||
+            nameLower.includes('agua') || nameLower.includes('cerveja') || nameLower.includes('chopp') ||
+            nameLower.includes('refrigerante') || nameLower.includes('coca') || nameLower.includes('guaraná') ||
+            nameLower.includes('guarana') || nameLower.includes('fanta') || nameLower.includes('sprite') ||
+            nameLower.includes('caipirinha') || nameLower.includes('gin') || nameLower.includes('vodka') ||
+            nameLower.includes('vinho') || nameLower.includes('tônica') || nameLower.includes('tonica') ||
+            nameLower.includes('copo') || nameLower.includes('lata') || nameLower.includes('long neck') ||
+            nameLower.includes('red bull') || nameLower.includes('energético') || nameLower.includes('energetico')
+          ) {
+            category = 'Bebidas';
+          } else if (
+            nameLower.includes('sobremesa') || nameLower.includes('sorvete') || nameLower.includes('picolé') ||
+            nameLower.includes('picole') || nameLower.includes('doce') || nameLower.includes('pudim') ||
+            nameLower.includes('mousse') || nameLower.includes('torta') || nameLower.includes('açaí') ||
+            nameLower.includes('acai') || nameLower.includes('petit') || nameLower.includes('chocolate') ||
+            nameLower.includes('pave') || nameLower.includes('pavê')
+          ) {
+            category = 'Sobremesas';
+          }
+
+          // Escolher emoji correspondente
+          let imageUrl = '🍽️';
+          if (category === 'Bebidas') {
+            if (nameLower.includes('água') || nameLower.includes('agua') || nameLower.includes('coco')) imageUrl = '🥥';
+            else if (nameLower.includes('cerveja') || nameLower.includes('chopp')) imageUrl = '🍺';
+            else if (nameLower.includes('suco') || nameLower.includes('refrigerante') || nameLower.includes('coca') || nameLower.includes('coke')) imageUrl = '🥤';
+            else imageUrl = '🍹';
+          } else if (category === 'Sobremesas') {
+            imageUrl = '🍨';
+          } else {
+            if (nameLower.includes('peixe')) imageUrl = '🐟';
+            else if (nameLower.includes('camarão') || nameLower.includes('camarao')) imageUrl = '🍤';
+            else if (nameLower.includes('lagosta')) imageUrl = '🦞';
+            else if (nameLower.includes('lula') || nameLower.includes('polvo')) imageUrl = '🐙';
+            else if (nameLower.includes('pastel') || nameLower.includes('empanada')) imageUrl = '🥟';
+            else if (nameLower.includes('batata') || nameLower.includes('frita')) imageUrl = '🍟';
+            else if (nameLower.includes('carne') || nameLower.includes('picanha') || nameLower.includes('espeto') || nameLower.includes('contra')) imageUrl = '🥩';
+            else if (nameLower.includes('queijo')) imageUrl = '🧀';
+          }
+
+          extractedItems.push({
+            name,
+            price,
+            description: `Importado via OCR do cardápio físico.`,
+            category,
+            imageUrl,
+            isAvailable: true,
+            isPromotion: false
+          });
+        }
+      });
+
+      if (extractedItems.length === 0) {
+        setScanLogs(prev => [
+          ...prev, 
+          `⚠️ [Aviso] O texto foi lido, mas nenhum item foi identificado no formato "Nome do Prato Preço".`,
+          `📝 Amostra de texto:\n${text.substring(0, 120)}`
+        ]);
+        setOnboardingMenuItems([
+          { name: 'Água de Coco Gelada', price: 8.00, description: 'Coco verde natural.', category: 'Bebidas', imageUrl: '🥥', isAvailable: true, isPromotion: false },
+          { name: 'Caipirinha Tradicional', price: 18.00, description: 'Cachaça artesanal e limão.', category: 'Bebidas', imageUrl: '🍹', isAvailable: true, isPromotion: false },
+          { name: 'Isca de Peixe Crocante', price: 55.00, description: 'Empanado no panko.', category: 'Petiscos', imageUrl: '🐟', isAvailable: true, isPromotion: false }
+        ]);
+      } else {
+        setScanLogs(prev => [...prev, `✨ [Resultado] OCR finalizado! ${extractedItems.length} pratos/bebidas importados com sucesso.`]);
+        setOnboardingMenuItems(extractedItems);
+      }
+
+      setScanProgress(100);
+      setIsScanningMenu(false);
+    } catch (err: any) {
+      console.error(err);
+      setScanLogs(prev => [...prev, `❌ [Erro] Falha no leitor de IA: ${err.message || err}`]);
+      setIsScanningMenu(false);
+      setScanProgress(100);
+      setOnboardingMenuItems([
+        { name: 'Água de Coco Gelada', price: 8.00, description: 'Coco verde natural.', category: 'Bebidas', imageUrl: '🥥', isAvailable: true, isPromotion: false },
+        { name: 'Caipirinha Tradicional', price: 18.00, description: 'Cachaça artesanal e limão.', category: 'Bebidas', imageUrl: '🍹', isAvailable: true, isPromotion: false },
+        { name: 'Isca de Peixe Crocante', price: 55.00, description: 'Empanado no panko.', category: 'Petiscos', imageUrl: '🐟', isAvailable: true, isPromotion: false }
+      ]);
+    }
   };
 
   // Dispara submit automático do PIN ao digitar 4 números
@@ -1479,44 +1575,7 @@ export const Login: React.FC<LoginProps> = ({ employees, onLoginSuccess, storeNa
           )}
         </div>
 
-        {/* Demonstração rápida dos acessos */}
-        {mode === 'staff' && (
-          <div style={{
-            backgroundColor: 'rgba(254, 243, 199, 0.5)',
-            border: '1px solid rgba(245, 158, 11, 0.3)',
-            borderRadius: '12px',
-            padding: '1rem',
-            marginTop: '1.5rem',
-            textAlign: 'left'
-          }}>
-            <h4 style={{
-              fontSize: '0.8rem',
-              fontWeight: 700,
-              color: 'var(--accent)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              marginBottom: '0.4rem'
-            }}>
-              <Sparkles size={14} /> Dados para Teste (Loja Padrão)
-            </h4>
-            <ul style={{
-              fontSize: '0.72rem',
-              color: 'var(--text-muted)',
-              listStyle: 'none',
-              paddingLeft: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '2px'
-            }}>
-              <li>🏢 <strong>Código da Barraca:</strong> <code>MAES01</code></li>
-              <li>🔑 <strong>Dono (Admin):</strong> PIN <code>0000</code> ou e-mail <code>dono@maestria.com</code> / senha <code>admin</code></li>
-              <li>🔑 <strong>Garçom Carlos:</strong> PIN <code>1234</code></li>
-              <li>🔑 <strong>Cozinha Chef:</strong> PIN <code>1111</code></li>
-              <li>🔑 <strong>Caixa Sandra:</strong> PIN <code>2222</code></li>
-            </ul>
-          </div>
-        )}
+        {/* Demonstração rápida dos acessos removida para experiência 100% de produção */}
       </div>
       </section>
 

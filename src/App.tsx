@@ -260,6 +260,17 @@ function App() {
     return () => window.removeEventListener('storage', handleStorage);
   }, [dbMode]);
 
+  // 4. Polling periódico de backup para garantir sincronização entre dispositivos
+  useEffect(() => {
+    if (dbMode !== 'supabase' || currentStoreId === 'local' || currentRole === 'login') return;
+
+    const interval = setInterval(() => {
+      loadStoreData(currentStoreId);
+    }, 5000); // Executa a cada 5 segundos
+
+    return () => clearInterval(interval);
+  }, [dbMode, currentStoreId, currentRole]);
+
   // Forçar recarga manual
   const forceSync = async () => {
     if (dbMode === 'supabase' && currentStoreId !== 'local') {
@@ -358,9 +369,19 @@ function App() {
   };
 
   const handleAddOrder = async (order: Order) => {
+    // Adiciona otimisticamente ao estado local para resposta instantânea
+    setOrders(prev => [...prev, order]);
+
     if (dbMode === 'supabase' && currentStoreId !== 'local') {
-      await addOrderSupabase(currentStoreId, order);
-      setOrders(await fetchOrders(currentStoreId));
+      const success = await addOrderSupabase(currentStoreId, order);
+      if (success) {
+        const dbOrders = await fetchOrders(currentStoreId);
+        setOrders(dbOrders);
+      } else {
+        // Remove em caso de erro
+        setOrders(prev => prev.filter(o => o.id !== order.id));
+        alert('Erro ao registrar o pedido no servidor. Por favor, tente novamente.');
+      }
     } else {
       const updated = [...orders, order];
       saveOrders(updated);
@@ -369,9 +390,17 @@ function App() {
   };
 
   const handleUpdateOrder = async (updatedOrder: Order) => {
+    // Atualização otimista local
+    setOrders(prev => prev.map(o => o.id === updatedOrder.id ? updatedOrder : o));
+
     if (dbMode === 'supabase' && currentStoreId !== 'local') {
-      await updateOrderSupabase(currentStoreId, updatedOrder);
-      setOrders(await fetchOrders(currentStoreId));
+      const success = await updateOrderSupabase(currentStoreId, updatedOrder);
+      if (success) {
+        const dbOrders = await fetchOrders(currentStoreId);
+        setOrders(dbOrders);
+      } else {
+        alert('Erro ao atualizar o pedido no servidor. Por favor, tente novamente.');
+      }
     } else {
       const updated = orders.map(o => o.id === updatedOrder.id ? updatedOrder : o);
       saveOrders(updated);
@@ -453,117 +482,7 @@ function App() {
           }
         `}} />
       )}
-      {/* Barra de Simulação do Demo */}
-      {currentRole !== 'login' && (
-        <div style={{
-          backgroundColor: '#0F172A',
-          color: '#E2E8F0',
-          padding: '0.5rem 1rem',
-          fontSize: '0.75rem',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: '10px',
-          flexWrap: 'wrap',
-          zIndex: 1000,
-          position: 'relative'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Sparkles size={14} style={{ color: '#F59E0B' }} />
-            <span><strong>Modo de Demonstração:</strong> Alterne de papel para testar o fluxo!</span>
-            <span style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              backgroundColor: dbMode === 'supabase' ? '#065F46' : '#374151',
-              color: dbMode === 'supabase' ? '#34D399' : '#D1D5DB',
-              padding: '2px 8px',
-              borderRadius: '50px',
-              fontSize: '0.65rem',
-              fontWeight: 700,
-              marginLeft: '10px'
-            }}>
-              <Database size={10} /> {dbMode === 'supabase' ? 'Supabase SaaS' : 'LocalStorage Offline'}
-            </span>
-          </div>
 
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <button 
-              onClick={() => setCurrentRole('owner')}
-              style={{
-                backgroundColor: currentRole === 'owner' ? '#0EA5E9' : '#334155',
-                color: 'white',
-                border: 'none',
-                padding: '3px 8px',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontWeight: 600
-              }}
-            >
-              👑 Dono (Admin)
-            </button>
-            <button 
-              onClick={() => setCurrentRole('waiter')}
-              style={{
-                backgroundColor: currentRole === 'waiter' ? '#0EA5E9' : '#334155',
-                color: 'white',
-                border: 'none',
-                padding: '3px 8px',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontWeight: 600
-              }}
-            >
-              🙋‍♂️ Garçom
-            </button>
-            <button 
-              onClick={() => setCurrentRole('kitchen')}
-              style={{
-                backgroundColor: currentRole === 'kitchen' ? '#0EA5E9' : '#334155',
-                color: 'white',
-                border: 'none',
-                padding: '3px 8px',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontWeight: 600
-              }}
-            >
-              🍳 Cozinha
-            </button>
-            <button 
-              onClick={() => setCurrentRole('cashier')}
-              style={{
-                backgroundColor: currentRole === 'cashier' ? '#0EA5E9' : '#334155',
-                color: 'white',
-                border: 'none',
-                padding: '3px 8px',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontWeight: 600
-              }}
-            >
-              💰 Caixa
-            </button>
-            
-            <button 
-              onClick={forceSync} 
-              title="Forçar Sincronização"
-              style={{
-                backgroundColor: '#1E293B',
-                color: '#94A3B8',
-                border: 'none',
-                padding: '3px 6px',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center'
-              }}
-            >
-              <RefreshCw size={12} />
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Renderização Condicional de Telas */}
       {currentRole === 'login' && (
