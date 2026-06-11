@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Order, Employee, StoreInfo } from '../types';
 import { 
   DollarSign, Receipt, Percent, ShieldCheck, LogOut, 
@@ -30,6 +30,15 @@ export const CashierPanel: React.FC<CashierPanelProps> = ({
   onLogout
 }) => {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  
+  // Estado para responsividade
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   
   // Estados para cálculos do fechamento
   const [applyServiceCharge, setApplyServiceCharge] = useState(true);
@@ -166,326 +175,350 @@ export const CashierPanel: React.FC<CashierPanelProps> = ({
         <div className="cashier-layout">
           
           {/* Coluna Esquerda: Lista de Mesas Ativas */}
-          <div>
-            <h2 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '1rem' }}>Contas Ativas</h2>
-            
-            {activeOrders.length === 0 ? (
-              <div style={{
-                textAlign: 'center',
-                padding: '4rem 2rem',
-                backgroundColor: 'white',
-                borderRadius: '16px',
-                border: '1px solid var(--border-color)',
-                boxShadow: 'var(--shadow-sm)'
-              }}>
-                <Receipt size={48} style={{ color: 'var(--text-light)', marginBottom: '1rem' }} />
-                <h3 style={{ fontSize: '1.25rem', marginBottom: '0.25rem' }}>Sem Contas Pendentes</h3>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Nenhuma mesa ativa consumindo no momento.</p>
-              </div>
-            ) : (
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-                gap: '1rem'
-              }}>
-                {activeOrders.map(order => {
-                  const orderSum = order.items.reduce((sum, i) => sum + (i.price * i.quantity), 0);
-                  const isSelected = order.id === selectedOrderId;
-                  const allDelivered = order.items.length > 0 && order.items.every(i => i.status === 'delivered');
-                  
-                  return (
-                    <div
-                      key={order.id}
-                      onClick={() => handleSelectOrder(order.id)}
-                      className="glass-panel"
-                      style={{
-                        padding: '1.25rem',
-                        cursor: 'pointer',
-                        border: isSelected ? '2px solid var(--primary)' : '1px solid var(--border-color)',
-                        backgroundColor: isSelected ? 'white' : 'var(--bg-card)',
-                        transform: isSelected ? 'scale(1.02)' : 'none',
-                        position: 'relative',
-                        boxShadow: isSelected ? 'var(--shadow-lg)' : 'var(--shadow-sm)'
-                      }}
-                    >
-                      {allDelivered && (
-                        <span className="badge badge-success" style={{
-                          position: 'absolute',
-                          top: '10px',
-                          right: '10px',
-                          fontSize: '0.55rem'
-                        }}>Pronta</span>
-                      )}
+          {(!isMobile || !selectedOrderId) && (
+            <div>
+              <h2 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '1rem' }}>Contas Ativas</h2>
+              
+              {activeOrders.length === 0 ? (
+                <div style={{
+                  textAlign: 'center',
+                  padding: '4rem 2rem',
+                  backgroundColor: 'white',
+                  borderRadius: '16px',
+                  border: '1px solid var(--border-color)',
+                  boxShadow: 'var(--shadow-sm)'
+                }}>
+                  <Receipt size={48} style={{ color: 'var(--text-light)', marginBottom: '1rem' }} />
+                  <h3 style={{ fontSize: '1.25rem', marginBottom: '0.25rem' }}>Sem Contas Pendentes</h3>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Nenhuma mesa ativa consumindo no momento.</p>
+                </div>
+              ) : (
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+                  gap: '1rem'
+                }}>
+                  {activeOrders.map(order => {
+                    const orderSum = order.items.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+                    const isSelected = order.id === selectedOrderId;
+                    const allDelivered = order.items.length > 0 && order.items.every(i => i.status === 'delivered');
+                    
+                    return (
+                      <div
+                        key={order.id}
+                        onClick={() => handleSelectOrder(order.id)}
+                        className="glass-panel"
+                        style={{
+                          padding: '1.25rem',
+                          cursor: 'pointer',
+                          border: isSelected ? '2px solid var(--primary)' : '1px solid var(--border-color)',
+                          backgroundColor: isSelected ? 'white' : 'var(--bg-card)',
+                          transform: isSelected ? 'scale(1.02)' : 'none',
+                          position: 'relative',
+                          boxShadow: isSelected ? 'var(--shadow-lg)' : 'var(--shadow-sm)'
+                        }}
+                      >
+                        {allDelivered && (
+                          <span className="badge badge-success" style={{
+                            position: 'absolute',
+                            top: '10px',
+                            right: '10px',
+                            fontSize: '0.55rem'
+                          }}>Pronta</span>
+                        )}
 
-                      <h3 style={{ fontSize: '1.3rem', fontWeight: 800, marginBottom: '0.25rem' }}>
-                        Mesa {order.tableNumber}
-                      </h3>
-                      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
-                        Garçom: {order.waiterName.split(' ')[0]}
-                      </p>
-                      <div className="flex-between">
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-light)' }}>Consumo:</span>
-                        <strong style={{ color: 'var(--secondary)', fontSize: '1.1rem' }}>
-                          R$ {orderSum.toFixed(2)}
-                        </strong>
+                        <h3 style={{ fontSize: '1.3rem', fontWeight: 800, marginBottom: '0.25rem' }}>
+                          Mesa {order.tableNumber}
+                        </h3>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+                          Garçom: {order.waiterName.split(' ')[0]}
+                        </p>
+                        <div className="flex-between">
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-light)' }}>Consumo:</span>
+                          <strong style={{ color: 'var(--secondary)', fontSize: '1.1rem' }}>
+                            R$ {orderSum.toFixed(2)}
+                          </strong>
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Coluna Direita: Detalhamento de Conta Selecionada */}
-          <div>
-            {selectedOrder ? (
-              <div className="bill-details glass-panel">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-                  <h3 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Fechamento Mesa {selectedOrder.tableNumber}</h3>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-light)' }}>ID: {selectedOrder.id.substr(4, 6)}</span>
-                </div>
-
-                {/* Lista de itens consumidos */}
-                <div style={{
-                  maxHeight: '180px',
-                  overflowY: 'auto',
-                  borderBottom: '1px solid var(--border-color)',
-                  paddingBottom: '1rem',
-                  marginBottom: '1rem'
-                }}>
-                  {selectedOrder.items.map(item => (
-                    <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
-                      <div style={{ flexGrow: 1 }}>
-                        <span style={{ fontWeight: 700, color: 'var(--primary)' }}>{item.quantity}x </span>
-                        <span>{item.name}</span>
-                        {item.status !== 'delivered' && (
-                          <span style={{ color: 'var(--accent)', fontSize: '0.7rem', marginLeft: '5px', display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
-                            <AlertTriangle size={10} /> Em preparo
-                          </span>
-                        )}
-                      </div>
-                      <span style={{ color: 'var(--text-muted)' }}>R$ {(item.price * item.quantity).toFixed(2)}</span>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Subtotais e acréscimos */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.9rem', marginBottom: '1.25rem' }}>
-                  <div className="flex-between">
-                    <span style={{ color: 'var(--text-muted)' }}>Subtotal do consumo:</span>
-                    <strong>R$ {subtotal.toFixed(2)}</strong>
-                  </div>
-
-                  <div className="flex-between">
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)' }}>
-                      <input 
-                        type="checkbox" 
-                        id="svc"
-                        checked={applyServiceCharge} 
-                        onChange={(e) => setApplyServiceCharge(e.target.checked)} 
-                      />
-                      <label htmlFor="svc" style={{ cursor: 'pointer' }}>Taxa de serviço ({storeInfo.serviceChargePercent}%)</label>
-                    </span>
-                    <span>R$ {serviceCharge.toFixed(2)}</span>
-                  </div>
-
-                  <div className="flex-between" style={{ alignItems: 'center' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Desconto manual (R$):</span>
-                    <input 
-                      type="number" 
-                      placeholder="0.00" 
-                      className="form-control" 
-                      style={{ width: '90px', padding: '0.25rem 0.5rem', fontSize: '0.85rem', textAlign: 'right' }}
-                      value={discountInput}
-                      onChange={(e) => setDiscountInput(e.target.value)} 
-                    />
-                  </div>
-
-                  <div className="flex-between" style={{ borderTop: '2px solid var(--border-color)', paddingTop: '0.75rem', marginTop: '0.5rem' }}>
-                    <span style={{ fontSize: '1.1rem', fontWeight: 800 }}>Total Geral:</span>
-                    <strong style={{ fontSize: '1.4rem', color: 'var(--success)' }}>R$ {total.toFixed(2)}</strong>
-                  </div>
-                </div>
-
-                {/* Métodos de Pagamento */}
-                <div style={{ marginBottom: '1.25rem' }}>
-                  <span className="form-label" style={{ marginBottom: '0.5rem' }}>Meio de Pagamento</span>
+          {(!isMobile || selectedOrderId) && (
+            <div>
+              {selectedOrder ? (
+                <div className="bill-details glass-panel">
+                  {/* Botão de Voltar no Mobile */}
+                  {isMobile && (
+                    <button 
+                      onClick={() => setSelectedOrderId(null)}
+                      className="btn btn-outline"
+                      style={{
+                        marginBottom: '1rem',
+                        padding: '0.4rem 0.8rem',
+                        fontSize: '0.8rem',
+                        borderRadius: '10px',
+                        width: 'fit-content',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      ← Voltar para Contas
+                    </button>
+                  )}
                   
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-                    <button
-                      onClick={() => setPaymentMethod('pix')}
-                      style={{
-                        padding: '0.75rem 0.25rem',
-                        borderRadius: '12px',
-                        border: '1px solid',
-                        borderColor: paymentMethod === 'pix' ? 'var(--primary)' : 'var(--border-color)',
-                        backgroundColor: paymentMethod === 'pix' ? 'var(--primary-light)' : 'white',
-                        color: paymentMethod === 'pix' ? 'var(--primary-dark)' : 'var(--text-main)',
-                        fontWeight: 700,
-                        fontSize: '0.75rem',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: '4px'
-                      }}
-                    >
-                      <span>⚡</span>
-                      <span>PIX</span>
-                    </button>
-
-                    <button
-                      onClick={() => setPaymentMethod('card')}
-                      style={{
-                        padding: '0.75rem 0.25rem',
-                        borderRadius: '12px',
-                        border: '1px solid',
-                        borderColor: paymentMethod === 'card' ? 'var(--primary)' : 'var(--border-color)',
-                        backgroundColor: paymentMethod === 'card' ? 'var(--primary-light)' : 'white',
-                        color: paymentMethod === 'card' ? 'var(--primary-dark)' : 'var(--text-main)',
-                        fontWeight: 700,
-                        fontSize: '0.75rem',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: '4px'
-                      }}
-                    >
-                      <CreditCard size={16} />
-                      <span>Cartão</span>
-                    </button>
-
-                    <button
-                      onClick={() => setPaymentMethod('cash')}
-                      style={{
-                        padding: '0.75rem 0.25rem',
-                        borderRadius: '12px',
-                        border: '1px solid',
-                        borderColor: paymentMethod === 'cash' ? 'var(--primary)' : 'var(--border-color)',
-                        backgroundColor: paymentMethod === 'cash' ? 'var(--primary-light)' : 'white',
-                        color: paymentMethod === 'cash' ? 'var(--primary-dark)' : 'var(--text-main)',
-                        fontWeight: 700,
-                        fontSize: '0.75rem',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: '4px'
-                      }}
-                    >
-                      <Coins size={16} />
-                      <span>Dinheiro</span>
-                    </button>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Fechamento Mesa {selectedOrder.tableNumber}</h3>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-light)' }}>ID: {selectedOrder.id.substr(4, 6)}</span>
                   </div>
-                </div>
 
-                {/* Calculadora de Troco (Dinheiro) */}
-                {paymentMethod === 'cash' && (
-                  <div className="glass-panel" style={{
-                    padding: '1rem',
-                    marginBottom: '1.25rem',
-                    background: '#fdfbf7',
-                    border: '1px solid var(--accent-light)'
+                  {/* Lista de itens consumidos */}
+                  <div style={{
+                    maxHeight: '180px',
+                    overflowY: 'auto',
+                    borderBottom: '1px solid var(--border-color)',
+                    paddingBottom: '1rem',
+                    marginBottom: '1rem'
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                      <ArrowRightLeft size={16} style={{ color: 'var(--accent)' }} />
-                      <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-main)' }}>Calculadora de Troco</span>
+                    {selectedOrder.items.map(item => (
+                      <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
+                        <div style={{ flexGrow: 1 }}>
+                          <span style={{ fontWeight: 700, color: 'var(--primary)' }}>{item.quantity}x </span>
+                          <span>{item.name}</span>
+                          {item.status !== 'delivered' && (
+                            <span style={{ color: 'var(--accent)', fontSize: '0.7rem', marginLeft: '5px', display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
+                              <AlertTriangle size={10} /> Em preparo
+                            </span>
+                          )}
+                        </div>
+                        <span style={{ color: 'var(--text-muted)' }}>R$ {(item.price * item.quantity).toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Subtotais e acréscimos */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.9rem', marginBottom: '1.25rem' }}>
+                    <div className="flex-between">
+                      <span style={{ color: 'var(--text-muted)' }}>Subtotal do consumo:</span>
+                      <strong>R$ {subtotal.toFixed(2)}</strong>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Valor Pago:</span>
+                    <div className="flex-between">
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)' }}>
+                        <input 
+                          type="checkbox" 
+                          id="svc"
+                          checked={applyServiceCharge} 
+                          onChange={(e) => setApplyServiceCharge(e.target.checked)} 
+                        />
+                        <label htmlFor="svc" style={{ cursor: 'pointer' }}>Taxa de serviço ({storeInfo.serviceChargePercent}%)</label>
+                      </span>
+                      <span>R$ {serviceCharge.toFixed(2)}</span>
+                    </div>
+
+                    <div className="flex-between" style={{ alignItems: 'center' }}>
+                      <span style={{ color: 'var(--text-muted)' }}>Desconto manual (R$):</span>
                       <input 
                         type="number" 
-                        placeholder="R$ 0,00" 
-                        className="form-control"
-                        style={{ width: '110px', padding: '4px 8px', fontSize: '0.85rem', textAlign: 'right' }}
-                        value={cashAmountPaid}
-                        onChange={e => setCashAmountPaid(e.target.value)}
+                        placeholder="0.00" 
+                        className="form-control" 
+                        style={{ width: '90px', padding: '0.25rem 0.5rem', fontSize: '0.85rem', textAlign: 'right' }}
+                        value={discountInput}
+                        onChange={(e) => setDiscountInput(e.target.value)} 
                       />
                     </div>
 
-                    {paidAmount > 0 && (
-                      <div className="flex-between" style={{ marginTop: '10px', borderTop: '1px dashed #cbd5e1', paddingTop: '8px' }}>
-                        <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>Troco a devolver:</span>
-                        <strong style={{ fontSize: '1.1rem', color: paidAmount >= total ? 'var(--success)' : 'var(--danger)' }}>
-                          {paidAmount >= total ? `R$ ${changeToReturn.toFixed(2)}` : 'Valor insuficiente'}
-                        </strong>
+                    <div className="flex-between" style={{ borderTop: '2px solid var(--border-color)', paddingTop: '0.75rem', marginTop: '0.5rem' }}>
+                      <span style={{ fontSize: '1.1rem', fontWeight: 800 }}>Total Geral:</span>
+                      <strong style={{ fontSize: '1.4rem', color: 'var(--success)' }}>R$ {total.toFixed(2)}</strong>
+                    </div>
+                  </div>
+
+                  {/* Métodos de Pagamento */}
+                  <div style={{ marginBottom: '1.25rem' }}>
+                    <span className="form-label" style={{ marginBottom: '0.5rem' }}>Meio de Pagamento</span>
+                    
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                      <button
+                        onClick={() => setPaymentMethod('pix')}
+                        style={{
+                          padding: '0.75rem 0.25rem',
+                          borderRadius: '12px',
+                          border: '1px solid',
+                          borderColor: paymentMethod === 'pix' ? 'var(--primary)' : 'var(--border-color)',
+                          backgroundColor: paymentMethod === 'pix' ? 'var(--primary-light)' : 'white',
+                          color: paymentMethod === 'pix' ? 'var(--primary-dark)' : 'var(--text-main)',
+                          fontWeight: 700,
+                          fontSize: '0.75rem',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        <span>⚡</span>
+                        <span>PIX</span>
+                      </button>
+
+                      <button
+                        onClick={() => setPaymentMethod('card')}
+                        style={{
+                          padding: '0.75rem 0.25rem',
+                          borderRadius: '12px',
+                          border: '1px solid',
+                          borderColor: paymentMethod === 'card' ? 'var(--primary)' : 'var(--border-color)',
+                          backgroundColor: paymentMethod === 'card' ? 'var(--primary-light)' : 'white',
+                          color: paymentMethod === 'card' ? 'var(--primary-dark)' : 'var(--text-main)',
+                          fontWeight: 700,
+                          fontSize: '0.75rem',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        <CreditCard size={16} />
+                        <span>Cartão</span>
+                      </button>
+
+                      <button
+                        onClick={() => setPaymentMethod('cash')}
+                        style={{
+                          padding: '0.75rem 0.25rem',
+                          borderRadius: '12px',
+                          border: '1px solid',
+                          borderColor: paymentMethod === 'cash' ? 'var(--primary)' : 'var(--border-color)',
+                          backgroundColor: paymentMethod === 'cash' ? 'var(--primary-light)' : 'white',
+                          color: paymentMethod === 'cash' ? 'var(--primary-dark)' : 'var(--text-main)',
+                          fontWeight: 700,
+                          fontSize: '0.75rem',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        <Coins size={16} />
+                        <span>Dinheiro</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Calculadora de Troco (Dinheiro) */}
+                  {paymentMethod === 'cash' && (
+                    <div className="glass-panel" style={{
+                      padding: '1rem',
+                      marginBottom: '1.25rem',
+                      background: '#fdfbf7',
+                      border: '1px solid var(--accent-light)'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                        <ArrowRightLeft size={16} style={{ color: 'var(--accent)' }} />
+                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-main)' }}>Calculadora de Troco</span>
                       </div>
-                    )}
-                  </div>
-                )}
 
-                {/* Simulação de PIX QR Code */}
-                {paymentMethod === 'pix' && (
-                  <div className="glass-panel" style={{
-                    padding: '1rem',
-                    marginBottom: '1.25rem',
-                    textAlign: 'center',
-                    background: '#f8fafc',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center'
-                  }}>
-                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)' }}>⚡ PIX Gerado (Copia e Cola)</span>
-                    <div style={{
-                      margin: '0.5rem 0',
-                      width: '100px',
-                      height: '100px',
-                      backgroundColor: 'white',
-                      border: '4px solid #334155',
-                      borderRadius: '8px',
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Valor Pago:</span>
+                        <input 
+                          type="number" 
+                          placeholder="R$ 0,00" 
+                          className="form-control"
+                          style={{ width: '110px', padding: '4px 8px', fontSize: '0.85rem', textAlign: 'right' }}
+                          value={cashAmountPaid}
+                          onChange={e => setCashAmountPaid(e.target.value)}
+                        />
+                      </div>
+
+                      {paidAmount > 0 && (
+                        <div className="flex-between" style={{ marginTop: '10px', borderTop: '1px dashed #cbd5e1', paddingTop: '8px' }}>
+                          <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>Troco a devolver:</span>
+                          <strong style={{ fontSize: '1.1rem', color: paidAmount >= total ? 'var(--success)' : 'var(--danger)' }}>
+                            {paidAmount >= total ? `R$ ${changeToReturn.toFixed(2)}` : 'Valor insuficiente'}
+                          </strong>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Simulação de PIX QR Code */}
+                  {paymentMethod === 'pix' && (
+                    <div className="glass-panel" style={{
+                      padding: '1rem',
+                      marginBottom: '1.25rem',
+                      textAlign: 'center',
+                      background: '#f8fafc',
                       display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '3rem'
-                    }}>📱</div>
-                    <textarea 
-                      readOnly 
-                      value={`00020101021226850014br.gov.pix0136ttmtkktnkzwlkjteiard@supabase.co5204000053039865405${total.toFixed(2)}5802BR5914MaestriaBeach6008Fortaleza62070503***6304FC3A`}
-                      style={{
-                        width: '100%',
-                        fontSize: '0.55rem',
-                        fontFamily: 'monospace',
-                        color: 'var(--text-muted)',
-                        padding: '4px',
-                        border: '1px solid var(--border-color)',
-                        borderRadius: '4px',
-                        resize: 'none',
-                        height: '40px'
-                      }}
-                    />
-                  </div>
-                )}
+                      flexDirection: 'column',
+                      alignItems: 'center'
+                    }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)' }}>⚡ PIX Gerado (Copia e Cola)</span>
+                      <div style={{
+                        margin: '0.5rem 0',
+                        width: '100px',
+                        height: '100px',
+                        backgroundColor: 'white',
+                        border: '4px solid #334155',
+                        borderRadius: '8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '3rem'
+                      }}>📱</div>
+                      <textarea 
+                        readOnly 
+                        value={`00020101021226850014br.gov.pix0136ttmtkktnkzwlkjteiard@supabase.co5204000053039865405${total.toFixed(2)}5802BR5914MaestriaBeach6008Fortaleza62070503***6304FC3A`}
+                        style={{
+                          width: '100%',
+                          fontSize: '0.55rem',
+                          fontFamily: 'monospace',
+                          color: 'var(--text-muted)',
+                          padding: '4px',
+                          border: '1px solid var(--border-color)',
+                          borderRadius: '4px',
+                          resize: 'none',
+                          height: '40px'
+                        }}
+                      />
+                    </div>
+                  )}
 
-                {/* Ações */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <button
-                    onClick={() => setShowReceipt(true)}
-                    className="btn btn-outline"
-                    style={{ width: '100%', borderRadius: '12px' }}
-                  >
-                    <Receipt size={16} /> Ver Recibo Digital
-                  </button>
-                  
-                  <button
-                    onClick={handleCloseTable}
-                    className="btn btn-primary"
-                    style={{ width: '100%', padding: '0.9rem', fontSize: '1rem', gap: '0.5rem', borderRadius: '12px' }}
-                    disabled={!paymentMethod || (paymentMethod === 'cash' && paidAmount < total)}
-                  >
-                    <Check size={18} /> Fechar Caixa da Mesa
-                  </button>
+                  {/* Ações */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <button
+                      onClick={() => setShowReceipt(true)}
+                      className="btn btn-outline"
+                      style={{ width: '100%', borderRadius: '12px' }}
+                    >
+                      <Receipt size={16} /> Ver Recibo Digital
+                    </button>
+                    
+                    <button
+                      onClick={handleCloseTable}
+                      className="btn btn-primary"
+                      style={{ width: '100%', padding: '0.9rem', fontSize: '1rem', gap: '0.5rem', borderRadius: '12px' }}
+                      disabled={!paymentMethod || (paymentMethod === 'cash' && paidAmount < total)}
+                    >
+                      <Check size={18} /> Fechar Caixa da Mesa
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <div className="bill-details glass-panel" style={{ textAlign: 'center', padding: '3rem 1.5rem', color: 'var(--text-muted)' }}>
-                <Calculator size={36} style={{ color: 'var(--text-light)', marginBottom: '0.75rem' }} />
-                <h3>Detalhamento da Conta</h3>
-                <p style={{ fontSize: '0.85rem' }}>Selecione uma mesa ativa ao lado para realizar o fechamento e emitir o recibo.</p>
-              </div>
-            )}
-          </div>
+              ) : (
+                <div className="bill-details glass-panel" style={{ textAlign: 'center', padding: '3rem 1.5rem', color: 'var(--text-muted)' }}>
+                  <Calculator size={36} style={{ color: 'var(--text-light)', marginBottom: '0.75rem' }} />
+                  <h3>Detalhamento da Conta</h3>
+                  <p style={{ fontSize: '0.85rem' }}>Selecione uma mesa ativa ao lado para realizar o fechamento e emitir o recibo.</p>
+                </div>
+              )}
+            </div>
+          )}
 
         </div>
       </main>

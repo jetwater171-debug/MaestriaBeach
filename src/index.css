@@ -691,6 +691,7 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Interface Garçom Mobile (Premium Shell) */
 .mobile-view {
+  width: 100%;
   max-width: 480px;
   margin: 0 auto;
   background: var(--bg-gradient);
@@ -1158,4 +1159,54 @@ h1, h2, h3, h4, h5, h6 {
   color: white;
   margin-bottom: 1rem;
   display: inline-block;
+}
+
+/* Otimização Responsiva do Painel do Dono (Design 2026) */
+@media (max-width: 768px) {
+  .sidebar {
+    flex-direction: row !important;
+    padding: 0.75rem 1rem !important;
+    border-right: none !important;
+    border-bottom: 1px solid var(--border-color) !important;
+    background: white !important;
+    justify-content: center !important;
+  }
+  
+  .sidebar-menu {
+    flex-direction: row !important;
+    overflow-x: auto !important;
+    width: 100% !important;
+    gap: 0.5rem !important;
+    scrollbar-width: none !important; /* Firefox */
+  }
+  
+  .sidebar-menu::-webkit-scrollbar {
+    display: none !important; /* Chrome, Safari, Opera */
+  }
+  
+  .sidebar-item {
+    padding: 0.5rem 1rem !important;
+    white-space: nowrap !important;
+    font-size: 0.8rem !important;
+    transform: none !important;
+  }
+  
+  .sidebar-item:hover, .sidebar-item.active {
+    transform: none !important;
+  }
+  
+  .sidebar-item.active {
+    border-left: none !important;
+    border-bottom: 3px solid var(--primary) !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+  }
+  
+  .sidebar-footer {
+    display: none !important;
+  }
+  
+  .content-area {
+    padding: 1.25rem !important;
+  }
 }

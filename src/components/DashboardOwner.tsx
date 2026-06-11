@@ -341,7 +341,7 @@ export const DashboardOwner: React.FC<DashboardOwnerProps> = ({
               <Store size={20} /> Dados da Barraca
             </button>
           </div>
-          <div style={{
+          <div className="sidebar-footer" style={{
             fontSize: '0.75rem',
             color: 'var(--text-light)',
             textAlign: 'center',

@@ -117,15 +117,15 @@ function App() {
       
       const isSupabaseActive = checkSupabase();
       
+      // Tentar restaurar sessão
+      const cachedStoreId = localStorage.getItem('mb_session_store_id');
+      const cachedEmpStr = localStorage.getItem('mb_session_employee');
+      const cachedStoreInfoStr = localStorage.getItem('mb_session_store_info');
+      const cachedRole = localStorage.getItem('mb_session_role');
+
       if (isSupabaseActive) {
         setDbMode('supabase');
         
-        // Tentar restaurar sessão
-        const cachedStoreId = localStorage.getItem('mb_session_store_id');
-        const cachedEmpStr = localStorage.getItem('mb_session_employee');
-        const cachedStoreInfoStr = localStorage.getItem('mb_session_store_info');
-        const cachedRole = localStorage.getItem('mb_session_role');
-
         if (cachedStoreId && cachedEmpStr && cachedStoreInfoStr && cachedRole) {
           try {
             const sId = cachedStoreId;
@@ -140,7 +140,7 @@ function App() {
             // Puxa dados da loja conectada
             await loadStoreData(sId);
           } catch (err) {
-            console.error('Erro ao restaurar sessão cacheada:', err);
+            console.error('Erro ao restaurar sessão cacheada do Supabase:', err);
             loadLocalFallback();
           }
         } else {
@@ -152,6 +152,21 @@ function App() {
       } else {
         setDbMode('local');
         loadLocalFallback();
+
+        if (cachedStoreId && cachedEmpStr && cachedStoreInfoStr && cachedRole) {
+          try {
+            const sId = cachedStoreId;
+            const emp = JSON.parse(cachedEmpStr);
+            const sInfo = JSON.parse(cachedStoreInfoStr);
+            
+            setCurrentStoreId(sId);
+            setUser(emp);
+            setStoreInfo(sInfo);
+            setCurrentRole(cachedRole as any);
+          } catch (err) {
+            console.error('Erro ao restaurar sessão cacheada local:', err);
+          }
+        }
       }
     };
 
