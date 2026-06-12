@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import {
   ArrowRight,
   BadgeCheck,
+  BellRing,
   Camera,
   ChefHat,
   Check,
@@ -16,6 +17,7 @@ import {
   Minus,
   Phone,
   Plus,
+  ReceiptText,
   ShieldCheck,
   Sparkles,
   Store,
@@ -40,7 +42,7 @@ interface LoginProps {
   storeName: string;
 }
 
-type AccessMode = 'staff' | 'owner' | 'register';
+type AccessMode = 'landing' | 'staff' | 'owner' | 'register';
 type RegisterStep = 1 | 2 | 3 | 4;
 
 type AiMenuItem = {
@@ -271,7 +273,7 @@ const normalizeAiMenuItems = (items: AiMenuItem[], categories: string[]): Omit<M
 };
 
 export const Login: React.FC<LoginProps> = ({ employees, onLoginSuccess, storeName }) => {
-  const [mode, setMode] = useState<AccessMode>('staff');
+  const [mode, setMode] = useState<AccessMode>('landing');
   const [registerStep, setRegisterStep] = useState<RegisterStep>(1);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -537,26 +539,28 @@ export const Login: React.FC<LoginProps> = ({ employees, onLoginSuccess, storeNa
 
   const header = (
     <header className="landing-nav product-nav">
-      <button className="wordmark" onClick={() => handleModeChange('staff')} type="button">
+      <div className="wordmark">
         <span className="wordmark-mark">MB</span>
         <span>Maestria Beach</span>
-      </button>
+      </div>
 
-      <nav className="landing-nav-links product-nav-links">
-        <button className={mode === 'staff' ? 'active' : ''} onClick={() => handleModeChange('staff')} type="button">
-          Login equipe
-        </button>
-        <button className={mode === 'owner' ? 'active' : ''} onClick={() => handleModeChange('owner')} type="button">
-          Login dono
-        </button>
-        <button className={mode === 'register' ? 'active' : ''} onClick={() => handleModeChange('register')} type="button">
-          Criar barraca
-        </button>
-      </nav>
+      {mode !== 'landing' && (
+        <nav className="landing-nav-links product-nav-links">
+          <button className={mode === 'staff' ? 'active' : ''} onClick={() => handleModeChange('staff')} type="button">
+            Login equipe
+          </button>
+          <button className={mode === 'owner' ? 'active' : ''} onClick={() => handleModeChange('owner')} type="button">
+            Login dono
+          </button>
+          <button className={mode === 'register' ? 'active' : ''} onClick={() => handleModeChange('register')} type="button">
+            Criar barraca
+          </button>
+        </nav>
+      )}
 
       <div className="nav-actions">
-        <button className="btn btn-primary" onClick={() => handleModeChange('register')} type="button">
-          Comecar
+        <button className="btn btn-primary landing-main-cta" onClick={() => handleModeChange('register')} type="button">
+          Criar sua Barraca
         </button>
       </div>
     </header>
@@ -1145,63 +1149,145 @@ export const Login: React.FC<LoginProps> = ({ employees, onLoginSuccess, storeNa
     </main>
   );
 
-  const landingSections = mode === 'staff' && (
-    <>
-      <section className="flow-section" id="fluxo">
-        <div className="section-heading">
-          <span>Fluxo completo</span>
-          <h2>Da mesa ao caixa sem perder pedido no caminho.</h2>
+  const landingPage = (
+    <main className="million-landing">
+      <section className="million-hero">
+        <div className="million-hero-copy">
+          <span className="hero-kicker premium-kicker">
+            <Sparkles size={16} /> Sistema premium para barracas que querem vender mais
+          </span>
+          <h1>Sua barraca deixando de operar no papel e virando uma maquina de pedidos.</h1>
+          <p>
+            O Maestria Beach organiza garcons, cozinha, bar e caixa em tempo real. Menos pedido perdido,
+            menos atraso, mais giro de mesa, mais controle e uma experiencia muito mais profissional para o cliente.
+          </p>
+
+          <button className="million-cta" onClick={() => handleModeChange('register')} type="button">
+            Criar sua Barraca
+            <ArrowRight size={20} />
+          </button>
+
+          <div className="million-proof-row" aria-label="Beneficios principais">
+            <span>
+              <strong>Tempo real</strong>
+              pedido pronto aparece para o garcom
+            </span>
+            <span>
+              <strong>Sem papel</strong>
+              mesa, comanda e caixa conectados
+            </span>
+            <span>
+              <strong>Mais venda</strong>
+              equipe atende mais rapido
+            </span>
+          </div>
         </div>
-        <div className="flow-grid">
-          <article>
-            <TabletSmartphone size={22} />
-            <h3>Garcom</h3>
-            <p>Seleciona mesa, lanca itens, adiciona observacoes e acompanha pronto/entregue.</p>
-          </article>
-          <article>
-            <ChefHat size={22} />
-            <h3>Cozinha e bar</h3>
-            <p>Recebe uma fila clara por item, mesa, tempo e setor de producao.</p>
-          </article>
-          <article>
-            <CircleDollarSign size={22} />
-            <h3>Caixa</h3>
-            <p>Fecha consumo, taxa de servico, desconto, troco e recibo digital.</p>
-          </article>
-          <article>
-            <LayoutDashboard size={22} />
-            <h3>Dono</h3>
-            <p>Configura barraca, funcionarios, cardapio, categorias e indicadores.</p>
-          </article>
+
+        <div className="live-ops-stage" aria-hidden="true">
+          <div className="sun-orbit" />
+          <div className="floating-ticket ticket-one">
+            <span>Mesa 12</span>
+            <strong>2x Camarao alho e oleo</strong>
+            <small>Enviado para cozinha</small>
+          </div>
+          <div className="floating-ticket ticket-two">
+            <span>Bar</span>
+            <strong>4x Caipirinha</strong>
+            <small>Pronto para buscar</small>
+          </div>
+          <div className="ops-device">
+            <div className="ops-device-top">
+              <span>Hoje na praia</span>
+              <strong>R$ 8.742</strong>
+            </div>
+            <div className="ops-flow-line active">
+              <TabletSmartphone size={18} />
+              <div>
+                <strong>Garcom lanca</strong>
+                <span>Mesa 08 - 5 itens</span>
+              </div>
+              <BadgeCheck size={18} />
+            </div>
+            <div className="ops-flow-line cooking">
+              <ChefHat size={18} />
+              <div>
+                <strong>Cozinha prepara</strong>
+                <span>Isca de peixe - 06 min</span>
+              </div>
+              <Clock3 size={18} />
+            </div>
+            <div className="ops-flow-line ready">
+              <BellRing size={18} />
+              <div>
+                <strong>Garcom avisado</strong>
+                <span>Mesa certa, pedido certo</span>
+              </div>
+              <Check size={18} />
+            </div>
+            <div className="ops-flow-line paid">
+              <ReceiptText size={18} />
+              <div>
+                <strong>Caixa fecha</strong>
+                <span>Recibo e total no painel</span>
+              </div>
+              <CircleDollarSign size={18} />
+            </div>
+          </div>
         </div>
       </section>
 
-      <section className="ops-section" id="operacao">
+      <section className="million-value-strip">
+        {[
+          ['Pedidos que nao somem', 'Cada item tem mesa, garcom, status e horario. A cozinha nao precisa decifrar papel molhado.'],
+          ['Equipe trabalhando junto', 'Mais de um garcom opera ao mesmo tempo, cada um com seus pedidos e alertas de prato pronto.'],
+          ['Dono com controle real', 'Cardapio, funcionarios, caixa, vendas e configuracao da barraca em um painel limpo.'],
+          ['Cardapio com IA', 'Tire foto do cardapio fisico e o sistema ajuda a montar itens, precos e categorias.']
+        ].map(([title, description]) => (
+          <article key={title}>
+            <BadgeCheck size={19} />
+            <h3>{title}</h3>
+            <p>{description}</p>
+          </article>
+        ))}
+      </section>
+
+      <section className="million-story-section">
         <div>
-          <span className="section-eyebrow">Operacao real</span>
-          <h2>Feito para turno corrido, tela pequena e equipe sem treinamento longo.</h2>
+          <span className="section-eyebrow">Por que vende mais</span>
+          <h2>Quando o atendimento fica rapido, a mesa gira. Quando a mesa gira, o caixa cresce.</h2>
         </div>
-        <div className="ops-grid">
-          {[
-            ['Pedidos por mesa', 'O consumo fica aberto ate o caixa fechar.'],
-            ['Status de preparo', 'Pendente, preparando, pronto e entregue.'],
-            ['PIN rapido', 'Funcionario nao precisa de e-mail para operar.'],
-            ['Dados locais', 'Funciona em modo local quando o banco nao esta conectado.']
-          ].map(([title, description]) => (
-            <div key={title}>
-              <BadgeCheck size={18} />
-              <strong>{title}</strong>
-              <span>{description}</span>
-            </div>
-          ))}
+        <div className="million-story-grid">
+          <div>
+            <strong>01</strong>
+            <h3>Garcom atende sem voltar no balcao</h3>
+            <p>Ele abre a mesa, lanca o pedido no celular e continua vendendo na areia.</p>
+          </div>
+          <div>
+            <strong>02</strong>
+            <h3>Cozinha recebe limpo e priorizado</h3>
+            <p>Pedido entra com observacao, tempo e setor. Bar e cozinha sabem exatamente o que fazer.</p>
+          </div>
+          <div>
+            <strong>03</strong>
+            <h3>Pronto vira alerta para entregar</h3>
+            <p>O garcom responsavel recebe o aviso e leva para a mesa certa, sem gritaria e sem atraso.</p>
+          </div>
+          <div>
+            <strong>04</strong>
+            <h3>Caixa fecha com confianca</h3>
+            <p>Consumo, taxa, desconto e recibo ficam prontos para cobrar sem recalcular tudo no papel.</p>
+          </div>
         </div>
       </section>
-    </>
+    </main>
   );
+
+  const landingSections = null;
 
   return (
     <div className="landing-page product-landing">
       {header}
+      {mode === 'landing' && landingPage}
       {mode === 'staff' && staffPage}
       {mode === 'owner' && ownerPage}
       {mode === 'register' && createStorePage}
