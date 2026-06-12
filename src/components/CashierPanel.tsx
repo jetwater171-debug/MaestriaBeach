@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Order, Employee, StoreInfo } from '../types';
 import { 
-  DollarSign, Receipt, Percent, ShieldCheck, LogOut, 
+  Receipt, LogOut, 
   CreditCard, Coins, Check, Calculator, AlertTriangle, 
-  TrendingUp, ArrowRightLeft 
+  ArrowRightLeft 
 } from 'lucide-react';
 
 interface CashierPanelProps {
@@ -25,7 +25,6 @@ export const CashierPanel: React.FC<CashierPanelProps> = ({
   cashierUser,
   storeInfo,
   orders,
-  onUpdateOrder,
   onCloseOrder,
   onLogout
 }) => {

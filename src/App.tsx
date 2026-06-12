@@ -34,7 +34,6 @@ import { DashboardOwner } from './components/DashboardOwner';
 import { WaiterPanel } from './components/WaiterPanel';
 import { KitchenPanel } from './components/KitchenPanel';
 import { CashierPanel } from './components/CashierPanel';
-import { Sparkles, RefreshCw, Database } from 'lucide-react';
 
 const hexToRgb = (hex: string): string => {
   hex = hex.replace(/^#/, '');
@@ -135,7 +134,7 @@ function App() {
             setCurrentStoreId(sId);
             setUser(emp);
             setStoreInfo(sInfo);
-            setCurrentRole(cachedRole as any);
+            setCurrentRole(cachedRole as 'owner' | 'waiter' | 'kitchen' | 'cashier');
 
             // Puxa dados da loja conectada
             await loadStoreData(sId);
@@ -162,7 +161,7 @@ function App() {
             setCurrentStoreId(sId);
             setUser(emp);
             setStoreInfo(sInfo);
-            setCurrentRole(cachedRole as any);
+            setCurrentRole(cachedRole as 'owner' | 'waiter' | 'kitchen' | 'cashier');
           } catch (err) {
             console.error('Erro ao restaurar sessão cacheada local:', err);
           }
@@ -272,7 +271,7 @@ function App() {
   }, [dbMode, currentStoreId, currentRole]);
 
   // Forçar recarga manual
-  const forceSync = async () => {
+  const _forceSync = async () => {
     if (dbMode === 'supabase' && currentStoreId !== 'local') {
       const store = await fetchStoreInfo(currentStoreId);
       if (store) setStoreInfo(store);

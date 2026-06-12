@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured } from './supabaseClient';
-import { StoreInfo, MenuItem, Employee, Order, OrderItem, DailySale } from './types';
+import { StoreInfo, MenuItem, Employee, Order, DailySale } from './types';
 
 // Retorna se o Supabase está ativo para uso
 export const checkSupabase = () => isSupabaseConfigured && supabase !== null;

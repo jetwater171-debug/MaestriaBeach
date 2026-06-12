@@ -3,7 +3,7 @@ import { MenuItem, Employee, Order, OrderItem, Table, TableStatus } from '../typ
 import { 
   ClipboardList, ShoppingCart, User, LogOut, CheckCircle, 
   Clock, Flame, Plus, Minus, Search, X, UtensilsCrossed, 
-  Calculator, CheckSquare, Coins 
+  Calculator, Coins 
 } from 'lucide-react';
 
 import { StoreInfo } from '../types';

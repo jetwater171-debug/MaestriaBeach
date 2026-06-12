@@ -1,12 +1,13 @@
-import { StoreInfo, MenuItem, Employee, Table, Order, DailySale } from './types';
+import { StoreInfo, MenuItem, Employee, Order, DailySale } from './types';
 
 export const DEFAULT_STORE_INFO: StoreInfo = {
   name: 'Maestria Beach Club',
-  logoUrl: '🏖️',
-  address: 'Avenida Beira Mar, 1000 - Ceará, Brasil',
+  logoUrl: 'MB',
+  address: 'Avenida Beira Mar, 1000 - Ceara, Brasil',
   phone: '(85) 99999-8888',
   tablesCount: 15,
   serviceChargePercent: 10,
+  tenantCode: 'MAES01',
   themeColor: 'teal',
   categories: ['Bebidas', 'Petiscos', 'Sobremesas']
 };
@@ -14,82 +15,82 @@ export const DEFAULT_STORE_INFO: StoreInfo = {
 export const DEFAULT_MENU_ITEMS: MenuItem[] = [
   {
     id: 'm1',
-    name: 'Água de Coco Gelada',
-    price: 8.00,
-    description: 'Coco verde natural colhido no dia, servido trincando de gelado.',
+    name: 'Agua de Coco Gelada',
+    price: 8,
+    description: 'Coco verde natural colhido no dia, servido bem gelado.',
     category: 'Bebidas',
-    imageUrl: '🥥',
+    imageUrl: 'CO',
     isAvailable: true,
     isPromotion: false
   },
   {
     id: 'm2',
     name: 'Caipirinha Tradicional',
-    price: 18.00,
-    description: 'Cachaça artesanal, limão taity fresquinho, açúcar e bastante gelo.',
+    price: 18,
+    description: 'Cachaca artesanal, limao tahiti, acucar e bastante gelo.',
     category: 'Bebidas',
-    imageUrl: '🍹',
+    imageUrl: 'DR',
     isAvailable: true,
     isPromotion: true,
-    promotionalPrice: 15.00
+    promotionalPrice: 15
   },
   {
     id: 'm3',
     name: 'Isca de Peixe Crocante',
-    price: 55.00,
-    description: 'Filé de peixe fresco empanado no panko, super crocante. Acompanha molho tártaro da casa.',
+    price: 55,
+    description: 'File de peixe fresco empanado no panko. Acompanha molho tartaro da casa.',
     category: 'Petiscos',
-    imageUrl: '🐟',
+    imageUrl: 'PX',
     isAvailable: true,
     isPromotion: false
   },
   {
     id: 'm4',
-    name: 'Camarão ao Alho e Óleo',
-    price: 69.00,
-    description: 'Camarões inteiros selecionados, dourados no azeite com alho laminado e salsinha.',
+    name: 'Camarao ao Alho e Oleo',
+    price: 69,
+    description: 'Camaroes selecionados dourados no azeite com alho laminado e salsinha.',
     category: 'Petiscos',
-    imageUrl: '🍤',
+    imageUrl: 'CM',
     isAvailable: true,
     isPromotion: false
   },
   {
     id: 'm5',
-    name: 'Pastel de Queijo Coalho (Porção)',
-    price: 24.00,
-    description: '6 unidades de mini pastéis recheados com queijo coalho nordestino derretido.',
+    name: 'Pastel de Queijo Coalho',
+    price: 24,
+    description: '6 unidades de mini pasteis recheados com queijo coalho.',
     category: 'Petiscos',
-    imageUrl: '🥟',
+    imageUrl: 'PA',
     isAvailable: true,
     isPromotion: false
   },
   {
     id: 'm6',
-    name: 'Batata Frita Rústica',
-    price: 28.00,
-    description: 'Porção generosa de batatas fritas rústicas com alecrim e maionese de alho.',
+    name: 'Batata Frita Rustica',
+    price: 28,
+    description: 'Porcao de batatas rusticas com alecrim e maionese de alho.',
     category: 'Petiscos',
-    imageUrl: '🍟',
+    imageUrl: 'BT',
     isAvailable: true,
     isPromotion: false
   },
   {
     id: 'm7',
     name: 'Cerveja Long Neck Premium',
-    price: 12.00,
-    description: 'Heineken ou Corona trincando de gelada.',
+    price: 12,
+    description: 'Long neck bem gelada para atendimento rapido.',
     category: 'Bebidas',
-    imageUrl: '🍺',
+    imageUrl: 'CV',
     isAvailable: true,
     isPromotion: false
   },
   {
     id: 'm8',
-    name: 'Suco Natural de Maracujá',
-    price: 10.00,
-    description: 'Suco da fruta pura com ou sem açúcar (jarra ou copo).',
+    name: 'Suco Natural de Maracuja',
+    price: 10,
+    description: 'Suco da fruta com ou sem acucar.',
     category: 'Bebidas',
-    imageUrl: '🥤',
+    imageUrl: 'SC',
     isAvailable: true,
     isPromotion: false
   }
@@ -98,7 +99,7 @@ export const DEFAULT_MENU_ITEMS: MenuItem[] = [
 export const DEFAULT_EMPLOYEES: Employee[] = [
   {
     id: 'e1',
-    name: 'Dono (Administrador)',
+    name: 'Dono Administrador',
     role: 'cashier',
     pin: '0000'
   },
@@ -128,8 +129,7 @@ export const DEFAULT_EMPLOYEES: Employee[] = [
   }
 ];
 
-// Memória local de fallback se o LocalStorage estiver inacessível ou lançar erro
-const memoryStore: Record<string, any> = {
+const memoryStore: Record<string, unknown> = {
   mb_store_info: DEFAULT_STORE_INFO,
   mb_menu_items: DEFAULT_MENU_ITEMS,
   mb_employees: DEFAULT_EMPLOYEES,
@@ -137,12 +137,11 @@ const memoryStore: Record<string, any> = {
   mb_sales: []
 };
 
-// Funções utilitárias seguras
 const safeGetItem = (key: string): string | null => {
   try {
     return localStorage.getItem(key);
-  } catch (e) {
-    console.warn(`LocalStorage inacessível para a chave "${key}". Usando fallback em memória.`, e);
+  } catch (error) {
+    console.warn(`LocalStorage indisponivel para "${key}". Usando memoria local.`, error);
     return JSON.stringify(memoryStore[key]);
   }
 };
@@ -150,27 +149,28 @@ const safeGetItem = (key: string): string | null => {
 const safeSetItem = (key: string, value: string) => {
   try {
     localStorage.setItem(key, value);
-  } catch (e) {
-    console.warn(`LocalStorage bloqueado ao tentar salvar a chave "${key}". Salvando em memória.`, e);
+  } catch (error) {
+    console.warn(`LocalStorage bloqueado para "${key}". Salvando em memoria local.`, error);
   }
+
   try {
     memoryStore[key] = JSON.parse(value);
-  } catch (err) {
-    console.error('Erro ao salvar em memória auxiliar:', err);
+  } catch (error) {
+    console.error('Erro ao atualizar memoria local:', error);
   }
 };
 
-const safeParseJSON = (jsonString: string | null, fallbackValue: any): any => {
+const safeParseJSON = <T,>(jsonString: string | null, fallbackValue: T): T => {
   if (!jsonString) return fallbackValue;
+
   try {
-    return JSON.parse(jsonString);
-  } catch (e) {
-    console.error('Erro de parse no JSON do LocalStorage. Resetando para valor padrão.', e);
+    return JSON.parse(jsonString) as T;
+  } catch (error) {
+    console.error('Erro ao ler JSON do LocalStorage. Usando valor padrao.', error);
     return fallbackValue;
   }
 };
 
-// Inicialização
 export const initializeLocalStorage = () => {
   try {
     if (!safeGetItem('mb_store_info')) {
@@ -188,8 +188,8 @@ export const initializeLocalStorage = () => {
     if (!safeGetItem('mb_sales')) {
       safeSetItem('mb_sales', JSON.stringify([]));
     }
-  } catch (e) {
-    console.error('Erro geral ao inicializar LocalStorage:', e);
+  } catch (error) {
+    console.error('Erro ao inicializar LocalStorage:', error);
   }
 };
 
@@ -238,5 +238,4 @@ export const saveSales = (sales: DailySale[]) => {
   safeSetItem('mb_sales', JSON.stringify(sales));
 };
 
-// Executa a inicialização de forma imediata na carga do módulo
 initializeLocalStorage();
