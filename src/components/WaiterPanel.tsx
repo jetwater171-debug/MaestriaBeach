@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { MenuItem, Employee, Order, OrderItem, Table, TableStatus } from '../types';
 import { 
   ClipboardList, ShoppingCart, User, LogOut, CheckCircle, 
@@ -57,6 +57,7 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
   // Novos estados para responsividade e fluxo desktop
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isAddingItemsToActiveTable, setIsAddingItemsToActiveTable] = useState(false);
+  const previousReadyCountRef = useRef(0);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -66,6 +67,30 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
 
   // Auxiliares de categorias
   const categories = ['Todos', ...(storeInfo.categories || Array.from(new Set(menuItems.map(item => item.category))))];
+
+  const isOrderAssignedToWaiter = (order: Order) =>
+    order.waiterId === waiter.id || order.waiterName === waiter.name;
+
+  const getActiveOrderByTable = (tableNumber: number) =>
+    orders.find(o => o.tableNumber === tableNumber && o.status === 'active');
+
+  const readyOrdersForThisWaiter = orders
+    .filter(order => order.status === 'active' && isOrderAssignedToWaiter(order))
+    .map(order => ({
+      ...order,
+      items: order.items.filter(item => item.status === 'ready')
+    }))
+    .filter(order => order.items.length > 0);
+
+  const readyItemsCount = readyOrdersForThisWaiter.reduce((sum, order) => sum + order.items.length, 0);
+  const readyTablesLabel = readyOrdersForThisWaiter.map(order => `Mesa ${order.tableNumber}`).join(', ');
+
+  useEffect(() => {
+    if (readyItemsCount > previousReadyCountRef.current && previousReadyCountRef.current > 0) {
+      navigator.vibrate?.(180);
+    }
+    previousReadyCountRef.current = readyItemsCount;
+  }, [readyItemsCount]);
 
   // Monitor de tempo (força re-render a cada minuto para atualizar os timers das mesas)
   const [, setTimeTick] = useState(0);
@@ -93,7 +118,7 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
   const getTables = (): Table[] => {
     const list: Table[] = [];
     for (let i = 1; i <= tablesCount; i++) {
-      const activeOrder = orders.find(o => o.tableNumber === i && o.status === 'active');
+      const activeOrder = getActiveOrderByTable(i);
       let status: TableStatus = 'available';
       
       if (activeOrder) {
@@ -110,8 +135,14 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
 
   // Garçom clica em uma mesa da grade
   const handleTableClick = (tableNumber: number) => {
+    const activeOrder = getActiveOrderByTable(tableNumber);
+
+    if (activeOrder && !isOrderAssignedToWaiter(activeOrder)) {
+      alert(`Mesa ${tableNumber} esta em atendimento com ${activeOrder.waiterName}.`);
+      return;
+    }
+
     setSelectedTable(tableNumber);
-    const activeOrder = orders.find(o => o.tableNumber === tableNumber && o.status === 'active');
     
     if (activeOrder) {
       // Mesa já está ocupada: abre modal de opções
@@ -125,8 +156,12 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
 
   // Garçom solicita o fechamento (chama o caixa)
   const handleRequestBill = (tableNumber: number) => {
-    const activeOrder = orders.find(o => o.tableNumber === tableNumber && o.status === 'active');
+    const activeOrder = getActiveOrderByTable(tableNumber);
     if (!activeOrder) return;
+    if (!isOrderAssignedToWaiter(activeOrder)) {
+      alert(`Mesa ${tableNumber} pertence ao atendimento de ${activeOrder.waiterName}.`);
+      return;
+    }
 
     const hasOpenProduction = activeOrder.items.some(item => item.status === 'pending' || item.status === 'preparing');
     if (hasOpenProduction) {
@@ -145,6 +180,32 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
     
     alert(`Fechamento da mesa ${tableNumber} solicitado ao caixa! 💰`);
     setShowTableOpsModal(false);
+  };
+
+  const handleDeliverReadyItem = (orderId: string, itemId: string) => {
+    const activeOrder = orders.find(o => o.id === orderId && o.status === 'active');
+    if (!activeOrder || !isOrderAssignedToWaiter(activeOrder)) return;
+
+    onUpdateOrder({
+      ...activeOrder,
+      items: activeOrder.items.map(item =>
+        item.id === itemId && item.status === 'ready'
+          ? { ...item, status: 'delivered' as const }
+          : item
+      )
+    });
+  };
+
+  const handleDeliverAllReady = (orderId: string) => {
+    const activeOrder = orders.find(o => o.id === orderId && o.status === 'active');
+    if (!activeOrder || !isOrderAssignedToWaiter(activeOrder)) return;
+
+    onUpdateOrder({
+      ...activeOrder,
+      items: activeOrder.items.map(item =>
+        item.status === 'ready' ? { ...item, status: 'delivered' as const } : item
+      )
+    });
   };
 
   // Funções do Carrinho
@@ -189,7 +250,11 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
       return;
     }
 
-    const activeOrder = orders.find(o => o.tableNumber === selectedTable && o.status === 'active');
+    const activeOrder = selectedTable ? getActiveOrderByTable(selectedTable) : null;
+    if (activeOrder && !isOrderAssignedToWaiter(activeOrder)) {
+      alert(`Mesa ${selectedTable} esta em atendimento com ${activeOrder.waiterName}.`);
+      return;
+    }
     const newItems: OrderItem[] = cartEntries.map(([itemId, cartItem]) => {
       const menuItem = menuItems.find(m => m.id === itemId)!;
       return {
@@ -246,8 +311,10 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
     return matchesCategory && matchesSearch && item.isAvailable;
   });
 
-  const myActiveOrders = orders.filter(o => o.waiterId === waiter.id && o.status === 'active');
-  const activeOrderForSelectedTable = selectedTable ? orders.find(o => o.tableNumber === selectedTable && o.status === 'active') : null;
+  const myActiveOrders = orders.filter(o => o.status === 'active' && isOrderAssignedToWaiter(o));
+  const activeOrderForSelectedTable = selectedTable
+    ? orders.find(o => o.tableNumber === selectedTable && o.status === 'active' && isOrderAssignedToWaiter(o))
+    : null;
 
   if (!isMobile) {
     return (
@@ -278,8 +345,16 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
           </div>
         </header>
 
+        {readyItemsCount > 0 && (
+          <div className="waiter-ready-alert" role="status" onClick={() => setActiveTab('my-orders')}>
+            <CheckCircle size={18} />
+            <strong>{readyItemsCount} item(ns) pronto(s)</strong>
+            <span>{readyTablesLabel}. Toque para ver e entregar.</span>
+          </div>
+        )}
+
         {/* Content Area */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', flexGrow: 1, height: 'calc(100vh - 75px)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', flexGrow: 1, height: readyItemsCount > 0 ? 'calc(100vh - 127px)' : 'calc(100vh - 75px)' }}>
           {/* Coluna Esquerda: Tabelas ou Meus Lançamentos */}
           <div style={{ padding: '2rem', borderRight: '1px solid var(--border-color)', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             {/* Abas */}
@@ -323,7 +398,16 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
                               <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
                                 {item.status === 'pending' && <span className="badge badge-warning" style={{ fontSize: '0.6rem' }}><Clock size={10} /> Pendente</span>}
                                 {item.status === 'preparing' && <span className="badge badge-info" style={{ fontSize: '0.6rem' }}><Flame size={10} /> Prep</span>}
-                                {item.status === 'ready' && <span className="badge badge-success ready-badge-pulse" style={{ fontSize: '0.6rem' }}><CheckCircle size={10} /> Pronto</span>}
+                                {item.status === 'ready' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeliverReadyItem(order.id, item.id)}
+                                    className="badge badge-success ready-badge-pulse"
+                                    style={{ fontSize: '0.6rem', border: 0, cursor: 'pointer' }}
+                                  >
+                                    <CheckCircle size={10} /> Entregar
+                                  </button>
+                                )}
                                 {item.status === 'delivered' && <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>Ok</span>}
                               </span>
                             </div>
@@ -333,6 +417,16 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
                           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Subtotal:</span>
                           <strong style={{ color: 'var(--secondary)' }}>R$ {order.subtotal.toFixed(2)}</strong>
                         </div>
+                        {order.items.some(item => item.status === 'ready') && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeliverAllReady(order.id)}
+                            className="btn btn-primary"
+                            style={{ width: '100%', marginTop: '0.75rem', borderRadius: '10px', padding: '0.55rem' }}
+                          >
+                            <CheckCircle size={15} /> Marcar prontos como entregues
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -346,27 +440,25 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
                   {tables.map(table => {
                     const isActive = !!table.activeOrderId;
                     const orderData = orders.find(o => o.id === table.activeOrderId);
+                    const belongsToCurrentWaiter = !orderData || isOrderAssignedToWaiter(orderData);
                     const tableTime = orderData ? getTableOccupiedTime(orderData.createdAt) : '';
                     const isSelected = selectedTable === table.number;
 
                     return (
                       <div 
                         key={table.number} 
-                        className={`table-card ${isActive ? 'occupied' : 'available'}`}
+                        className={`table-card ${isActive ? 'occupied' : 'available'} ${!belongsToCurrentWaiter ? 'other-waiter' : ''}`}
                         style={{
                           borderColor: isSelected ? 'var(--primary)' : undefined,
                           borderWidth: isSelected ? '3px' : '2px',
                           boxShadow: isSelected ? '0 0 15px rgba(15, 106, 128, 0.25)' : undefined,
-                          transform: isSelected ? 'translateY(-4px)' : undefined
+                          transform: isSelected ? 'translateY(-4px)' : undefined,
+                          opacity: belongsToCurrentWaiter ? 1 : 0.62
                         }}
-                        onClick={() => {
-                          setSelectedTable(table.number);
-                          setIsAddingItemsToActiveTable(false);
-                          if (!isActive) setCart({});
-                        }}
+                        onClick={() => handleTableClick(table.number)}
                       >
                         <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', position: 'absolute', top: '8px', left: '10px' }}>
-                          {isActive ? 'Ocupada' : 'Livre'}
+                          {isActive ? (belongsToCurrentWaiter ? 'Minha mesa' : orderData?.waiterName.split(' ')[0]) : 'Livre'}
                         </span>
                         <span className="table-number">{table.number}</span>
                         {isActive && tableTime && (
@@ -431,7 +523,16 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
                               <span>
                                 {item.status === 'pending' && <span className="badge badge-warning" style={{ padding: '2px 6px', fontSize: '0.6rem' }}><Clock size={8} /> Pendente</span>}
                                 {item.status === 'preparing' && <span className="badge badge-info" style={{ padding: '2px 6px', fontSize: '0.6rem' }}><Flame size={8} /> Prep</span>}
-                                {item.status === 'ready' && <span className="badge badge-success ready-badge-pulse" style={{ padding: '2px 6px', fontSize: '0.6rem' }}><CheckCircle size={8} /> Pronto</span>}
+                                {item.status === 'ready' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeliverReadyItem(activeOrderForSelectedTable.id, item.id)}
+                                    className="badge badge-success ready-badge-pulse"
+                                    style={{ padding: '2px 6px', fontSize: '0.6rem', border: 0, cursor: 'pointer' }}
+                                  >
+                                    <CheckCircle size={8} /> Entregar
+                                  </button>
+                                )}
                                 {item.status === 'delivered' && <span style={{ color: 'var(--text-light)', fontSize: '0.72rem' }}>Entregue</span>}
                               </span>
                               <strong style={{ color: 'var(--text-main)' }}>R$ {(item.price * item.quantity).toFixed(2)}</strong>
@@ -729,6 +830,14 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
         </button>
       </header>
 
+      {readyItemsCount > 0 && (
+        <div className="waiter-ready-alert mobile" role="status" onClick={() => setActiveTab('my-orders')}>
+          <CheckCircle size={17} />
+          <strong>{readyItemsCount} pronto(s)</strong>
+          <span>{readyTablesLabel}</span>
+        </div>
+      )}
+
       {/* Mobile Content */}
       <div className="mobile-content">
         
@@ -747,16 +856,18 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
               {tables.map(table => {
                 const isActive = !!table.activeOrderId;
                 const orderData = orders.find(o => o.id === table.activeOrderId);
+                const belongsToCurrentWaiter = !orderData || isOrderAssignedToWaiter(orderData);
                 const tableTime = orderData ? getTableOccupiedTime(orderData.createdAt) : '';
 
                 return (
                   <div 
                     key={table.number} 
-                    className={`table-card ${isActive ? 'occupied' : 'available'}`}
+                    className={`table-card ${isActive ? 'occupied' : 'available'} ${!belongsToCurrentWaiter ? 'other-waiter' : ''}`}
+                    style={{ opacity: belongsToCurrentWaiter ? 1 : 0.62 }}
                     onClick={() => handleTableClick(table.number)}
                   >
                     <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', position: 'absolute', top: '8px', left: '10px' }}>
-                      {isActive ? 'Ocupada' : 'Livre'}
+                      {isActive ? (belongsToCurrentWaiter ? 'Minha mesa' : orderData?.waiterName.split(' ')[0]) : 'Livre'}
                     </span>
                     <span className="table-number">{table.number}</span>
                     {isActive && tableTime && (
@@ -955,14 +1066,33 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
                           <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
                             {item.status === 'pending' && <span className="badge badge-warning" style={{ fontSize: '0.6rem' }}><Clock size={10} /> Pendente</span>}
                             {item.status === 'preparing' && <span className="badge badge-info" style={{ fontSize: '0.6rem' }}><Flame size={10} /> Preparando</span>}
-                            {item.status === 'ready' && <span className="badge badge-success ready-badge-pulse" style={{ fontSize: '0.6rem' }}><CheckCircle size={10} /> Pronto</span>}
+                            {item.status === 'ready' && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeliverReadyItem(order.id, item.id)}
+                                className="badge badge-success ready-badge-pulse"
+                                style={{ fontSize: '0.6rem', border: 0, cursor: 'pointer' }}
+                              >
+                                <CheckCircle size={10} /> Entregar
+                              </button>
+                            )}
                             {item.status === 'delivered' && <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>Entregue</span>}
                           </span>
                         </div>
                       ))}
-                    </div>
                   </div>
-                ))}
+                  {order.items.some(item => item.status === 'ready') && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeliverAllReady(order.id)}
+                      className="btn btn-primary"
+                      style={{ width: '100%', marginTop: '0.75rem', borderRadius: '10px', padding: '0.65rem' }}
+                    >
+                      <CheckCircle size={15} /> Marcar prontos como entregues
+                    </button>
+                  )}
+                </div>
+              ))}
               </div>
             )}
           </div>
@@ -1113,7 +1243,7 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
           className={`mobile-nav-btn ${activeTab === 'my-orders' ? 'active' : ''}`}
         >
           <ClipboardList size={20} />
-          <span>Status</span>
+          <span>{readyItemsCount > 0 ? `Status (${readyItemsCount})` : 'Status'}</span>
         </button>
       </nav>
     </div>
