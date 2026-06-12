@@ -4,6 +4,33 @@ import { StoreInfo, MenuItem, Employee, Order, DailySale, AdminStoreSummary } fr
 // Retorna se o Supabase está ativo para uso
 export const checkSupabase = () => isSupabaseConfigured && supabase !== null;
 
+const isUUID = (str: string | undefined | null): boolean => {
+  if (!str) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+};
+
+const passwordHashPrefix = 'sha256:';
+
+const hashPassword = async (password: string): Promise<string> => {
+  const normalized = password.trim();
+  if (!normalized) return normalized;
+  if (typeof crypto === 'undefined' || !crypto.subtle) return normalized;
+
+  const encoded = new TextEncoder().encode(normalized);
+  const digest = await crypto.subtle.digest('SHA-256', encoded);
+  const hash = Array.from(new Uint8Array(digest))
+    .map(byte => byte.toString(16).padStart(2, '0'))
+    .join('');
+
+  return `${passwordHashPrefix}${hash}`;
+};
+
+const ownerPasswordCandidates = async (password: string): Promise<string[]> => {
+  const normalized = password.trim();
+  const hashed = await hashPassword(normalized);
+  return Array.from(new Set([hashed, normalized].filter(Boolean)));
+};
+
 // ==========================================
 // FLUXOS DE AUTENTICAÇÃO SAAS (MULTI-TENANT)
 // ==========================================
@@ -18,6 +45,8 @@ export const registerNewStore = async (
   if (!checkSupabase()) return null;
 
   try {
+    const ownerPassword = await hashPassword(passwordStr);
+
     // 1. Inserir a loja
     const { data: storeData, error: storeError } = await supabase!
       .from('stores')
@@ -25,7 +54,7 @@ export const registerNewStore = async (
         name: name,
         tenant_code: tenantCode.toUpperCase().trim(),
         owner_email: email.toLowerCase().trim(),
-        owner_password: passwordStr,
+        owner_password: ownerPassword,
         tables_count: 15,
         service_charge_percent: 10.00,
         logo_url: '🏖️'
@@ -105,6 +134,8 @@ export const registerNewStoreExtended = async (
   if (!checkSupabase()) return null;
 
   try {
+    const ownerPassword = await hashPassword(ownerPasswordStr);
+
     // 1. Inserir a loja
     const { data: storeData, error: storeError } = await supabase!
       .from('stores')
@@ -112,7 +143,7 @@ export const registerNewStoreExtended = async (
         name: storeDataInput.name,
         tenant_code: storeDataInput.tenantCode.toUpperCase().trim(),
         owner_email: ownerEmail.toLowerCase().trim(),
-        owner_password: ownerPasswordStr,
+        owner_password: ownerPassword,
         tables_count: storeDataInput.tablesCount || 15,
         service_charge_percent: storeDataInput.serviceChargePercent || 10.00,
         logo_url: storeDataInput.logoUrl || '🏖️',
@@ -220,12 +251,13 @@ export const loginOwner = async (
   passwordStr: string
 ): Promise<{ store: StoreInfo; employee: Employee; storeId: string } | null> => {
   if (!checkSupabase()) return null;
+  const passwordCandidates = await ownerPasswordCandidates(passwordStr);
 
   const { data: storeData, error: storeError } = await supabase!
     .from('stores')
     .select('*')
     .eq('owner_email', email.toLowerCase().trim())
-    .eq('owner_password', passwordStr)
+    .in('owner_password', passwordCandidates)
     .maybeSingle();
 
   if (storeError || !storeData) {
@@ -441,6 +473,34 @@ export const addMenuItemSupabase = async (storeId: string, item: Omit<MenuItem, 
   };
 };
 
+// Atualizar item do cardapio
+export const updateMenuItemSupabase = async (storeId: string, item: MenuItem): Promise<boolean> => {
+  if (!checkSupabase()) return false;
+  if (!isUUID(item.id)) return false;
+
+  const { error } = await supabase!
+    .from('menu_items')
+    .update({
+      name: item.name,
+      price: item.price,
+      description: item.description,
+      category: item.category,
+      image_url: item.imageUrl,
+      is_available: item.isAvailable,
+      is_promotion: item.isPromotion,
+      promotional_price: item.promotionalPrice ?? null
+    })
+    .eq('id', item.id)
+    .eq('store_id', storeId);
+
+  if (error) {
+    console.error('Erro ao atualizar item do cardapio:', error);
+    return false;
+  }
+
+  return true;
+};
+
 // Deletar item do cardápio
 export const deleteMenuItemSupabase = async (id: string): Promise<boolean> => {
   if (!checkSupabase()) return false;
@@ -499,6 +559,29 @@ export const addEmployeeSupabase = async (storeId: string, emp: Omit<Employee, '
     role: data.role,
     pin: data.pin
   };
+};
+
+// Atualizar funcionario
+export const updateEmployeeSupabase = async (storeId: string, emp: Employee): Promise<boolean> => {
+  if (!checkSupabase()) return false;
+  if (!isUUID(emp.id)) return false;
+
+  const { error } = await supabase!
+    .from('employees')
+    .update({
+      name: emp.name,
+      role: emp.role,
+      pin: emp.pin
+    })
+    .eq('id', emp.id)
+    .eq('store_id', storeId);
+
+  if (error) {
+    console.error('Erro ao atualizar funcionario:', error);
+    return false;
+  }
+
+  return true;
 };
 
 // Deletar funcionário
@@ -616,11 +699,6 @@ export const addOrderSupabase = async (storeId: string, order: Order): Promise<b
 export const updateOrderSupabase = async (storeId: string, order: Order): Promise<boolean> => {
   if (!checkSupabase()) return false;
 
-  const isUUID = (str: string | undefined | null): boolean => {
-    if (!str) return false;
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
-  };
-
   const { error: orderError } = await supabase!
     .from('orders')
     .update({
@@ -632,34 +710,70 @@ export const updateOrderSupabase = async (storeId: string, order: Order): Promis
       payment_method: order.paymentMethod,
       completed_at: order.completedAt
     })
-    .eq('id', order.id);
+    .eq('id', order.id)
+    .eq('store_id', storeId);
 
   if (orderError) {
     console.error('Erro ao atualizar pedido:', orderError);
     return false;
   }
 
-  // Substitui itens
-  await supabase!.from('order_items').delete().eq('order_id', order.id);
+  const existingItems = order.items.filter(item => isUUID(item.id));
+  const newItems = order.items.filter(item => !isUUID(item.id));
+  const keepItemIds = existingItems.map(item => item.id);
 
-  const itemsToInsert = order.items.map(item => ({
-    id: (item.id && item.id.startsWith('oi_')) ? undefined : (isUUID(item.id) ? item.id : undefined),
-    order_id: order.id,
-    menu_item_id: isUUID(item.menuItemId) ? item.menuItemId : null,
-    name: item.name,
-    price: item.price,
-    quantity: item.quantity,
-    observations: item.observations,
-    status: item.status,
-    sent_at: item.sentAt
-  }));
+  if (existingItems.length > 0) {
+    const { error: itemsError } = await supabase!
+      .from('order_items')
+      .upsert(existingItems.map(item => ({
+        id: item.id,
+        order_id: order.id,
+        menu_item_id: isUUID(item.menuItemId) ? item.menuItemId : null,
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+        observations: item.observations,
+        status: item.status,
+        sent_at: item.sentAt
+      })), { onConflict: 'id' });
 
-  const { error: itemsError } = await supabase!
-    .from('order_items')
-    .insert(itemsToInsert);
+    if (itemsError) {
+      console.error('Erro ao atualizar itens de pedido:', itemsError);
+      return false;
+    }
+  }
 
-  if (itemsError) {
-    console.error('Erro ao atualizar itens de pedido:', itemsError);
+  if (newItems.length > 0) {
+    const { data: insertedItems, error: insertItemsError } = await supabase!
+      .from('order_items')
+      .insert(newItems.map(item => ({
+        order_id: order.id,
+        menu_item_id: isUUID(item.menuItemId) ? item.menuItemId : null,
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+        observations: item.observations,
+        status: item.status,
+        sent_at: item.sentAt
+      })))
+      .select('id');
+
+    if (insertItemsError) {
+      console.error('Erro ao inserir novos itens do pedido:', insertItemsError);
+      return false;
+    }
+
+    keepItemIds.push(...(insertedItems || []).map(item => item.id));
+  }
+
+  let deleteQuery = supabase!.from('order_items').delete().eq('order_id', order.id);
+  if (keepItemIds.length > 0) {
+    deleteQuery = deleteQuery.not('id', 'in', `(${keepItemIds.join(',')})`);
+  }
+  const { error: cleanupError } = await deleteQuery;
+
+  if (cleanupError) {
+    console.error('Erro ao limpar itens removidos do pedido:', cleanupError);
     return false;
   }
 

@@ -12,6 +12,34 @@ interface KitchenPanelProps {
 
 type ProductionFilter = 'all' | 'kitchen' | 'bar';
 
+const isBarCategory = (category: string) => {
+  const normalized = category
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+  return [
+    'bebida',
+    'bebidas',
+    'drink',
+    'drinks',
+    'cerveja',
+    'cervejas',
+    'suco',
+    'sucos',
+    'refrigerante',
+    'refrigerantes',
+    'agua',
+    'aguas',
+    'caipirinha',
+    'caipirinhas',
+    'vinho',
+    'vinhos',
+    'destilado',
+    'destilados'
+  ].some(keyword => normalized.includes(keyword));
+};
+
 export const KitchenPanel: React.FC<KitchenPanelProps> = ({
   kitchenUser,
   orders,
@@ -92,11 +120,12 @@ export const KitchenPanel: React.FC<KitchenPanelProps> = ({
 
           // Filtra por Categoria de Produção
           const itemCat = getItemCategory(item.menuItemId);
+          const isBarItem = isBarCategory(itemCat);
           if (filterMode === 'bar') {
-            return itemCat === 'Bebidas';
+            return isBarItem;
           }
           if (filterMode === 'kitchen') {
-            return itemCat !== 'Bebidas';
+            return !isBarItem;
           }
           return true; // Mode 'all'
         });
@@ -140,10 +169,11 @@ export const KitchenPanel: React.FC<KitchenPanelProps> = ({
     // Filtra apenas os itens exibidos atualmente no card com base na categoria
     const updatedItems = originalOrder.items.map(item => {
       const itemCat = getItemCategory(item.menuItemId);
+      const isBarItem = isBarCategory(itemCat);
       const isItemMatchingFilter = 
         filterMode === 'all' ||
-        (filterMode === 'bar' && itemCat === 'Bebidas') ||
-        (filterMode === 'kitchen' && itemCat !== 'Bebidas');
+        (filterMode === 'bar' && isBarItem) ||
+        (filterMode === 'kitchen' && !isBarItem);
 
       if (isItemMatchingFilter) {
         if (item.status === 'pending' || (newStatus === 'ready' && item.status === 'preparing')) {
@@ -375,14 +405,14 @@ export const KitchenPanel: React.FC<KitchenPanelProps> = ({
                               {item.name}{' '}
                               <span style={{
                                 fontSize: '0.65rem',
-                                color: getItemCategory(item.menuItemId) === 'Bebidas' ? 'var(--primary)' : 'var(--secondary)',
-                                backgroundColor: getItemCategory(item.menuItemId) === 'Bebidas' ? 'var(--primary-light)' : 'var(--secondary-light)',
+                                color: isBarCategory(getItemCategory(item.menuItemId)) ? 'var(--primary)' : 'var(--secondary)',
+                                backgroundColor: isBarCategory(getItemCategory(item.menuItemId)) ? 'var(--primary-light)' : 'var(--secondary-light)',
                                 padding: '2px 6px',
                                 borderRadius: '10px',
                                 fontWeight: 700,
                                 marginLeft: '6px'
                               }}>
-                                {getItemCategory(item.menuItemId) === 'Bebidas' ? 'Bar' : 'Cozinha'}
+                                {isBarCategory(getItemCategory(item.menuItemId)) ? 'Bar' : 'Cozinha'}
                               </span>
                             </span>
                           </div>

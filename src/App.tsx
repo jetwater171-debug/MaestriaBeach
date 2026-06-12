@@ -18,9 +18,11 @@ import {
   updateStoreInfoSupabase, 
   fetchMenuItems, 
   addMenuItemSupabase, 
+  updateMenuItemSupabase,
   deleteMenuItemSupabase, 
   fetchEmployees, 
   addEmployeeSupabase, 
+  updateEmployeeSupabase,
   deleteEmployeeSupabase, 
   fetchOrders, 
   addOrderSupabase, 
@@ -338,13 +340,28 @@ function MainApp() {
 
   const handleUpdateMenuItems = async (items: MenuItem[]) => {
     if (dbMode === 'supabase' && currentStoreId !== 'local') {
-      if (items.length < menuItems.length) {
-        const deletedItem = menuItems.find(mi => !items.some(i => i.id === mi.id));
-        if (deletedItem) await deleteMenuItemSupabase(deletedItem.id);
-      } else if (items.length > menuItems.length) {
-        const newItem = items.find(mi => !menuItems.some(i => i.id === mi.id));
-        if (newItem) await addMenuItemSupabase(currentStoreId, newItem);
+      const previousById = new Map(menuItems.map(item => [item.id, item]));
+      const nextIds = new Set(items.map(item => item.id));
+
+      for (const item of items) {
+        const previous = previousById.get(item.id);
+        if (!previous) {
+          await addMenuItemSupabase(currentStoreId, item);
+          continue;
+        }
+
+        const changed = JSON.stringify(previous) !== JSON.stringify(item);
+        if (changed) {
+          await updateMenuItemSupabase(currentStoreId, item);
+        }
       }
+
+      for (const previous of menuItems) {
+        if (!nextIds.has(previous.id)) {
+          await deleteMenuItemSupabase(previous.id);
+        }
+      }
+
       setMenuItems(await fetchMenuItems(currentStoreId));
     } else {
       saveMenuItems(items);
@@ -354,13 +371,28 @@ function MainApp() {
 
   const handleUpdateEmployees = async (emps: Employee[]) => {
     if (dbMode === 'supabase' && currentStoreId !== 'local') {
-      if (emps.length < employees.length) {
-        const deleted = employees.find(e => !emps.some(i => i.id === e.id));
-        if (deleted) await deleteEmployeeSupabase(deleted.id);
-      } else if (emps.length > employees.length) {
-        const added = emps.find(e => !employees.some(i => i.id === e.id));
-        if (added) await addEmployeeSupabase(currentStoreId, added);
+      const previousById = new Map(employees.map(employee => [employee.id, employee]));
+      const nextIds = new Set(emps.map(employee => employee.id));
+
+      for (const employee of emps) {
+        const previous = previousById.get(employee.id);
+        if (!previous) {
+          await addEmployeeSupabase(currentStoreId, employee);
+          continue;
+        }
+
+        const changed = JSON.stringify(previous) !== JSON.stringify(employee);
+        if (changed) {
+          await updateEmployeeSupabase(currentStoreId, employee);
+        }
       }
+
+      for (const previous of employees) {
+        if (!nextIds.has(previous.id)) {
+          await deleteEmployeeSupabase(previous.id);
+        }
+      }
+
       setEmployees(await fetchEmployees(currentStoreId));
     } else {
       saveEmployees(emps);

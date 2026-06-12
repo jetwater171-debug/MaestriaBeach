@@ -14,7 +14,7 @@ export interface Employee {
   id: string;
   name: string;
   role: 'waiter' | 'kitchen' | 'cashier';
-  pin: string; // Senha numérica de 4 dígitos para login rápido no celular
+  pin: string; // Senha numerica de 4 digitos para login rapido no celular
 }
 
 export interface StoreInfo {
@@ -23,16 +23,16 @@ export interface StoreInfo {
   address?: string;
   phone?: string;
   tablesCount: number;
-  serviceChargePercent: number; // ex: 10%
-  tenantCode?: string; // Código de login rápido da equipe
+  serviceChargePercent: number;
+  tenantCode?: string; // Codigo de login rapido da equipe
   themeColor?: string; // 'teal' | 'coral' | 'gold' | 'emerald'
-  categories?: string[]; // Lista de categorias de cardápio personalizadas
+  categories?: string[]; // Lista de categorias de cardapio personalizadas
 }
 
 export type OrderItemStatus = 'pending' | 'preparing' | 'ready' | 'delivered';
 
 export interface OrderItem {
-  id: string; // Identificador único do item no pedido (para pratos repetidos com observações diferentes)
+  id: string; // Identificador unico do item no pedido
   menuItemId: string;
   name: string;
   price: number;

@@ -82,7 +82,7 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
     const diffMs = now.getTime() - created.getTime();
     const diffMins = Math.floor(diffMs / 60000);
     
-    if (diffMins < 1) return 'Abril agora';
+    if (diffMins < 1) return 'Agora';
     if (diffMins < 60) return `${diffMins} min`;
     const hours = Math.floor(diffMins / 60);
     const mins = diffMins % 60;
@@ -127,12 +127,16 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
   const handleRequestBill = (tableNumber: number) => {
     const activeOrder = orders.find(o => o.tableNumber === tableNumber && o.status === 'active');
     if (!activeOrder) return;
+
+    const hasOpenProduction = activeOrder.items.some(item => item.status === 'pending' || item.status === 'preparing');
+    if (hasOpenProduction) {
+      alert(`A mesa ${tableNumber} ainda tem itens em preparo. Finalize a entrega antes de pedir o fechamento.`);
+      return;
+    }
     
-    // Marca todos os itens pendentes como entregues e atualiza ordem
-    const updatedItems = activeOrder.items.map(item => ({
-      ...item,
-      status: 'delivered' as const
-    }));
+    const updatedItems = activeOrder.items.map(item => (
+      item.status === 'ready' ? { ...item, status: 'delivered' as const } : item
+    ));
 
     onUpdateOrder({
       ...activeOrder,

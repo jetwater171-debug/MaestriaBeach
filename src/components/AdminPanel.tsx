@@ -18,8 +18,6 @@ import {
 import { AdminStoreSummary, StoreInfo } from '../types';
 import { getEmployees, getMenuItems, getOrders, getStoreInfo, saveStoreInfo } from '../mockData';
 
-const ADMIN_PASSWORD = 'Leo12345';
-
 type AdminStoreDetails = {
   store: AdminStoreSummary;
   employees: Array<{ id: string; name: string; role: string; pin: string }>;
@@ -87,12 +85,12 @@ export const AdminPanel: React.FC = () => {
     setError('');
 
     try {
-      const data = await adminRequest<{ stores: AdminStoreSummary[] }>('/api/admin-stores', password || ADMIN_PASSWORD);
+      const data = await adminRequest<{ stores: AdminStoreSummary[] }>('/api/admin-stores', password);
       setStores(data.stores);
     } catch (loadError) {
       console.error(loadError);
       setError(loadError instanceof Error ? loadError.message : 'Nao foi possivel carregar as barracas.');
-      setStores([buildLocalAdminStore()]);
+      setStores(window.location.hostname === 'localhost' ? [buildLocalAdminStore()] : []);
     } finally {
       setLoading(false);
     }
@@ -128,18 +126,27 @@ export const AdminPanel: React.FC = () => {
     );
   }, [stores]);
 
-  const handleLogin = (event: React.FormEvent) => {
+  const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault();
     setError('');
 
-    if (password === ADMIN_PASSWORD) {
-      sessionStorage.setItem('mb_admin_auth', 'true');
-      sessionStorage.setItem('mb_admin_password', password);
-      setIsAuthenticated(true);
+    if (password.trim().length < 8) {
+      setError('Digite a senha admin configurada na Vercel.');
       return;
     }
 
-    setError('Senha admin incorreta.');
+    setLoading(true);
+    try {
+      const data = await adminRequest<{ stores: AdminStoreSummary[] }>('/api/admin-stores', password);
+      setStores(data.stores);
+      sessionStorage.setItem('mb_admin_auth', 'true');
+      sessionStorage.setItem('mb_admin_password', password);
+      setIsAuthenticated(true);
+    } catch (loginError) {
+      setError(loginError instanceof Error ? loginError.message : 'Senha admin incorreta.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSaveStore = async (event: React.FormEvent) => {
@@ -179,8 +186,11 @@ export const AdminPanel: React.FC = () => {
   };
 
   const handleDeleteStore = async (store: AdminStoreSummary) => {
-    const confirmed = confirm(`Excluir definitivamente a barraca "${store.name}" e todos os dados vinculados?`);
-    if (!confirmed) return;
+    const typedName = prompt(`Exclusao definitiva: digite exatamente "${store.name}" para apagar a barraca e todos os dados vinculados.`);
+    if (typedName !== store.name) {
+      setError('Exclusao cancelada: o nome digitado nao confere.');
+      return;
+    }
 
     setLoading(true);
     try {

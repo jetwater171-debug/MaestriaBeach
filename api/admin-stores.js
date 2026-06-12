@@ -16,7 +16,8 @@ const getAdminPassword = (req) =>
   req.headers['x-admin-password'] || req.headers['X-Admin-Password'] || '';
 
 const assertAdmin = (req) => {
-  const expectedPassword = process.env.ADMIN_PASSWORD || 'Leo12345';
+  const expectedPassword = process.env.ADMIN_PASSWORD;
+  if (!expectedPassword) return false;
   return getAdminPassword(req) === expectedPassword;
 };
 

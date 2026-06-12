@@ -115,6 +115,42 @@ export const CashierPanel: React.FC<CashierPanelProps> = ({
     setShowReceipt(false);
   };
 
+  const buildReceiptText = () => {
+    if (!selectedOrder) return '';
+
+    const lines = [
+      storeInfo.name,
+      storeInfo.address || '',
+      storeInfo.phone || '',
+      `Recibo da mesa ${selectedOrder.tableNumber}`,
+      `Data: ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}`,
+      `Atendente: ${selectedOrder.waiterName}`,
+      '',
+      ...selectedOrder.items.map(item =>
+        `${item.quantity}x ${item.name} - R$ ${(item.price * item.quantity).toFixed(2)}`
+      ),
+      '',
+      `Subtotal: R$ ${subtotal.toFixed(2)}`,
+      applyServiceCharge ? `Servico (${storeInfo.serviceChargePercent}%): R$ ${serviceCharge.toFixed(2)}` : '',
+      discount > 0 ? `Desconto: R$ -${discount.toFixed(2)}` : '',
+      `Total: R$ ${total.toFixed(2)}`,
+      '',
+      'Maestria Beach'
+    ];
+
+    return lines.filter(Boolean).join('\n');
+  };
+
+  const handleCopyReceipt = async () => {
+    await navigator.clipboard?.writeText(buildReceiptText());
+    alert('Recibo copiado.');
+  };
+
+  const handleShareReceiptWhatsApp = () => {
+    const url = `https://wa.me/?text=${encodeURIComponent(buildReceiptText())}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
   return (
     <div className="app-container">
       {/* Header */}
@@ -447,7 +483,7 @@ export const CashierPanel: React.FC<CashierPanelProps> = ({
                     </div>
                   )}
 
-                  {/* Simulação de PIX QR Code */}
+                  {/* Registro manual de PIX */}
                   {paymentMethod === 'pix' && (
                     <div className="glass-panel" style={{
                       padding: '1rem',
@@ -458,7 +494,10 @@ export const CashierPanel: React.FC<CashierPanelProps> = ({
                       flexDirection: 'column',
                       alignItems: 'center'
                     }}>
-                      <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)' }}>⚡ PIX Gerado (Copia e Cola)</span>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)' }}>PIX manual / aguardando confirmacao</span>
+                      <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '0.35rem 0 0' }}>
+                        Registre o pagamento depois de confirmar o recebimento no banco ou maquininha. Integracao automatica de PIX pode ser ativada no backend.
+                      </p>
                       <div style={{
                         margin: '0.5rem 0',
                         width: '100px',
@@ -573,6 +612,12 @@ export const CashierPanel: React.FC<CashierPanelProps> = ({
             </div>
 
             <div className="modal-footer" style={{ fontFamily: 'var(--font-title)' }}>
+              <button onClick={handleCopyReceipt} className="btn btn-outline" style={{ width: '100%', borderRadius: '12px' }}>
+                Copiar recibo
+              </button>
+              <button onClick={handleShareReceiptWhatsApp} className="btn btn-outline" style={{ width: '100%', borderRadius: '12px' }}>
+                Enviar no WhatsApp
+              </button>
               <button onClick={() => setShowReceipt(false)} className="btn btn-primary" style={{ width: '100%', borderRadius: '12px' }}>Ok, Fechar Recibo</button>
             </div>
           </div>

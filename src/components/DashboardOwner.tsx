@@ -20,6 +20,16 @@ interface DashboardOwnerProps {
 
 type TabType = 'overview' | 'menu' | 'employees' | 'settings';
 
+const isDrinkCategory = (category: string) => {
+  const normalized = category
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+  return ['bebida', 'drink', 'cerveja', 'suco', 'refrigerante', 'agua', 'caipirinha', 'vinho', 'destilado']
+    .some(keyword => normalized.includes(keyword));
+};
+
 export const DashboardOwner: React.FC<DashboardOwnerProps> = ({
   storeInfo,
   onUpdateStoreInfo,
@@ -210,7 +220,7 @@ export const DashboardOwner: React.FC<DashboardOwnerProps> = ({
           const menuItem = menuItems.find(m => m.id === item.menuItemId || m.name === item.name);
           const category = menuItem?.category || 'Petiscos';
           const value = item.price * item.quantity;
-          if (category === 'Bebidas') {
+          if (isDrinkCategory(category)) {
             drinkSales += value;
           } else {
             foodSales += value;
