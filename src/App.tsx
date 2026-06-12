@@ -15,6 +15,7 @@ import {
 import { 
   checkSupabase, 
   fetchStoreInfo, 
+  loginEmployee,
   updateStoreInfoSupabase, 
   fetchMenuItems, 
   addMenuItemSupabase, 
@@ -124,9 +125,30 @@ function MainApp() {
       const cachedEmpStr = localStorage.getItem('mb_session_employee');
       const cachedStoreInfoStr = localStorage.getItem('mb_session_store_info');
       const cachedRole = localStorage.getItem('mb_session_role');
+      const params = new URLSearchParams(window.location.search);
+      const autoLoginStore = params.get('store') || params.get('tenant');
+      const autoLoginPin = params.get('pin');
+      const shouldAutoLogin = params.get('autologin') === '1' && autoLoginStore && autoLoginPin;
 
       if (isSupabaseActive) {
         setDbMode('supabase');
+
+        if (shouldAutoLogin) {
+          const result = await loginEmployee(autoLoginStore, autoLoginPin);
+          if (result) {
+            setCurrentStoreId(result.storeId);
+            setUser(result.employee);
+            setStoreInfo(result.store);
+            setCurrentRole(result.employee.role);
+            localStorage.setItem('mb_session_store_id', result.storeId);
+            localStorage.setItem('mb_session_employee', JSON.stringify(result.employee));
+            localStorage.setItem('mb_session_store_info', JSON.stringify(result.store));
+            localStorage.setItem('mb_session_role', result.employee.role);
+            await loadStoreData(result.storeId);
+            window.history.replaceState({}, document.title, window.location.pathname);
+            return;
+          }
+        }
         
         if (cachedStoreId && cachedEmpStr && cachedStoreInfoStr && cachedRole) {
           try {
@@ -154,6 +176,26 @@ function MainApp() {
       } else {
         setDbMode('local');
         loadLocalFallback();
+
+        if (shouldAutoLogin) {
+          const localStoreInfo = getStoreInfo();
+          const normalizedStore = autoLoginStore.toUpperCase().trim();
+          const localEmployee = getEmployees().find(employee => employee.pin === autoLoginPin);
+          const storeMatches = normalizedStore === 'MAES01' || normalizedStore === localStoreInfo.tenantCode?.toUpperCase();
+
+          if (localEmployee && storeMatches) {
+            setCurrentStoreId('local');
+            setUser(localEmployee);
+            setStoreInfo(localStoreInfo);
+            setCurrentRole(localEmployee.role);
+            localStorage.setItem('mb_session_store_id', 'local');
+            localStorage.setItem('mb_session_employee', JSON.stringify(localEmployee));
+            localStorage.setItem('mb_session_store_info', JSON.stringify(localStoreInfo));
+            localStorage.setItem('mb_session_role', localEmployee.role);
+            window.history.replaceState({}, document.title, window.location.pathname);
+            return;
+          }
+        }
 
         if (cachedStoreId && cachedEmpStr && cachedStoreInfoStr && cachedRole) {
           try {

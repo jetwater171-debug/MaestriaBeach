@@ -3,7 +3,7 @@ import { StoreInfo, MenuItem, Employee, DailySale, Order } from '../types';
 import { 
   Store, Utensils, Users, TrendingUp, Plus, Trash2, 
   Save, DollarSign, ShoppingBag, Percent, LogOut, ShieldAlert,
-  Award, BarChart2, Hash, X
+  Award, BarChart2, Hash, X, Copy, ExternalLink
 } from 'lucide-react';
 
 interface DashboardOwnerProps {
@@ -194,6 +194,20 @@ export const DashboardOwner: React.FC<DashboardOwnerProps> = ({
   };
 
   // Métricas do Painel Financeiro
+  const buildEmployeeAccessLink = (employee: Employee) => {
+    const tenant = storeInfo.tenantCode || 'MAES01';
+    const url = new URL(window.location.origin);
+    url.searchParams.set('store', tenant.toUpperCase());
+    url.searchParams.set('pin', employee.pin);
+    url.searchParams.set('autologin', '1');
+    return url.toString();
+  };
+
+  const handleCopyEmployeeLink = async (employee: Employee) => {
+    await navigator.clipboard?.writeText(buildEmployeeAccessLink(employee));
+    alert(`Link de acesso de ${employee.name} copiado.`);
+  };
+
   const totalRevenue = sales.reduce((acc, sale) => acc + sale.totalSales, 0);
   const totalOrdersCount = sales.reduce((acc, sale) => acc + sale.orderCount, 0);
   const averageTicket = totalOrdersCount > 0 ? (totalRevenue / totalOrdersCount) : 0;
@@ -606,6 +620,46 @@ export const DashboardOwner: React.FC<DashboardOwnerProps> = ({
                     }}>
                       <span style={{ color: 'var(--text-muted)' }}>PIN de Acesso:</span>
                       <strong style={{ fontSize: '1.05rem', letterSpacing: '2px', color: 'var(--primary-dark)' }}>{emp.pin}</strong>
+                    </div>
+
+                    <div style={{
+                      backgroundColor: '#eef7f6',
+                      border: '1px solid rgba(var(--primary-rgb), 0.18)',
+                      padding: '0.65rem 0.8rem',
+                      borderRadius: '8px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px'
+                    }}>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--primary-dark)', textTransform: 'uppercase' }}>
+                        Link direto do funcionario
+                      </span>
+                      <input
+                        readOnly
+                        value={buildEmployeeAccessLink(emp)}
+                        className="form-control"
+                        style={{ fontSize: '0.72rem', height: '34px', padding: '0 0.55rem' }}
+                        onFocus={event => event.currentTarget.select()}
+                      />
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyEmployeeLink(emp)}
+                          className="btn btn-outline"
+                          style={{ padding: '0.45rem 0.55rem', fontSize: '0.72rem', borderRadius: '8px', justifyContent: 'center' }}
+                        >
+                          <Copy size={13} /> Copiar
+                        </button>
+                        <a
+                          href={buildEmployeeAccessLink(emp)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="btn btn-outline"
+                          style={{ padding: '0.45rem 0.55rem', fontSize: '0.72rem', borderRadius: '8px', justifyContent: 'center', textDecoration: 'none' }}
+                        >
+                          <ExternalLink size={13} /> Abrir
+                        </a>
+                      </div>
                     </div>
 
                     <div className="flex-between" style={{ borderTop: '1px solid #f1f5f9', paddingTop: '0.6rem', marginTop: '4px' }}>
