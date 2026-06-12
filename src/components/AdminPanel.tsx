@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   Building2,
@@ -9,16 +9,23 @@ import {
   Save,
   Search,
   ShieldCheck,
+  Store,
   Trash2,
   Users,
   Utensils,
   X
 } from 'lucide-react';
 import { AdminStoreSummary, StoreInfo } from '../types';
-import { checkSupabase, deleteAdminStoreSupabase, fetchAdminStores, updateAdminStoreSupabase } from '../supabaseService';
 import { getEmployees, getMenuItems, getOrders, getStoreInfo, saveStoreInfo } from '../mockData';
 
 const ADMIN_PASSWORD = 'Leo12345';
+
+type AdminStoreDetails = {
+  store: AdminStoreSummary;
+  employees: Array<{ id: string; name: string; role: string; pin: string }>;
+  menuItems: Array<{ id: string; name: string; category: string; price: number; is_available?: boolean }>;
+  orders: Array<{ id: string; table_number: number; status: string; total: number; created_at: string }>;
+};
 
 const buildLocalAdminStore = (): AdminStoreSummary => {
   const store = getStoreInfo();
@@ -43,36 +50,59 @@ const buildLocalAdminStore = (): AdminStoreSummary => {
 const currency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
 
+const adminRequest = async <T,>(
+  path: string,
+  password: string,
+  options: RequestInit = {}
+): Promise<T> => {
+  const response = await fetch(path, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      'x-admin-password': password,
+      ...(options.headers || {})
+    }
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || 'Erro na API admin.');
+  }
+
+  return data as T;
+};
+
 export const AdminPanel: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(() => sessionStorage.getItem('mb_admin_auth') === 'true');
-  const [password, setPassword] = useState('');
+  const [password, setPassword] = useState(() => sessionStorage.getItem('mb_admin_password') || '');
   const [stores, setStores] = useState<AdminStoreSummary[]>([]);
   const [selectedStore, setSelectedStore] = useState<AdminStoreSummary | null>(null);
+  const [selectedDetails, setSelectedDetails] = useState<AdminStoreDetails | null>(null);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const loadStores = async () => {
+  const loadStores = useCallback(async () => {
     setLoading(true);
     setError('');
 
     try {
-      const remoteStores = checkSupabase() ? await fetchAdminStores() : [];
-      setStores(remoteStores.length > 0 ? remoteStores : [buildLocalAdminStore()]);
+      const data = await adminRequest<{ stores: AdminStoreSummary[] }>('/api/admin-stores', password || ADMIN_PASSWORD);
+      setStores(data.stores);
     } catch (loadError) {
       console.error(loadError);
-      setError('Nao foi possivel carregar as barracas. Verifique Supabase/RLS.');
+      setError(loadError instanceof Error ? loadError.message : 'Nao foi possivel carregar as barracas.');
       setStores([buildLocalAdminStore()]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [password]);
 
   useEffect(() => {
     if (isAuthenticated) {
       loadStores();
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, loadStores]);
 
   const filteredStores = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -104,6 +134,7 @@ export const AdminPanel: React.FC = () => {
 
     if (password === ADMIN_PASSWORD) {
       sessionStorage.setItem('mb_admin_auth', 'true');
+      sessionStorage.setItem('mb_admin_password', password);
       setIsAuthenticated(true);
       return;
     }
@@ -129,18 +160,22 @@ export const AdminPanel: React.FC = () => {
     };
 
     setLoading(true);
-    const success = selectedStore.id === 'local'
-      ? (saveStoreInfo(payload), true)
-      : await updateAdminStoreSupabase(selectedStore.id, payload);
-    setLoading(false);
-
-    if (!success) {
-      setError('Nao foi possivel salvar a barraca. Verifique permissoes do Supabase.');
-      return;
+    try {
+      if (selectedStore.id === 'local') {
+        saveStoreInfo(payload);
+      } else {
+        await adminRequest(`/api/admin-stores?id=${encodeURIComponent(selectedStore.id)}`, password, {
+          method: 'PATCH',
+          body: JSON.stringify(payload)
+        });
+      }
+      setSelectedStore(null);
+      await loadStores();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Nao foi possivel salvar a barraca.');
+    } finally {
+      setLoading(false);
     }
-
-    setSelectedStore(null);
-    await loadStores();
   };
 
   const handleDeleteStore = async (store: AdminStoreSummary) => {
@@ -148,18 +183,60 @@ export const AdminPanel: React.FC = () => {
     if (!confirmed) return;
 
     setLoading(true);
-    const success = store.id === 'local'
-      ? (['mb_store_info', 'mb_menu_items', 'mb_employees', 'mb_orders', 'mb_sales'].forEach(key => localStorage.removeItem(key)), true)
-      : await deleteAdminStoreSupabase(store.id);
-    setLoading(false);
-
-    if (!success) {
-      setError('Nao foi possivel excluir a barraca. Verifique permissoes do Supabase.');
-      return;
+    try {
+      if (store.id === 'local') {
+        ['mb_store_info', 'mb_menu_items', 'mb_employees', 'mb_orders', 'mb_sales'].forEach(key => localStorage.removeItem(key));
+      } else {
+        await adminRequest(`/api/admin-stores?id=${encodeURIComponent(store.id)}`, password, {
+          method: 'DELETE'
+        });
+      }
+      setSelectedStore(null);
+      setSelectedDetails(null);
+      await loadStores();
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Nao foi possivel excluir a barraca.');
+    } finally {
+      setLoading(false);
     }
+  };
 
-    setSelectedStore(null);
-    await loadStores();
+  const loadStoreDetails = async (store: AdminStoreSummary) => {
+    setError('');
+    setLoading(true);
+
+    try {
+      if (store.id === 'local') {
+        setSelectedDetails({
+          store,
+          employees: getEmployees(),
+          menuItems: getMenuItems().map(item => ({
+            id: item.id,
+            name: item.name,
+            category: item.category,
+            price: item.price,
+            is_available: item.isAvailable
+          })),
+          orders: getOrders().map(order => ({
+            id: order.id,
+            table_number: order.tableNumber,
+            status: order.status,
+            total: order.total,
+            created_at: order.createdAt
+          }))
+        });
+      } else {
+        const details = await adminRequest<AdminStoreDetails>(
+          `/api/admin-stores?id=${encodeURIComponent(store.id)}`,
+          password
+        );
+        setSelectedDetails(details);
+      }
+    } catch (detailsError) {
+      setError(detailsError instanceof Error ? detailsError.message : 'Nao foi possivel carregar detalhes.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const exportStores = () => {
@@ -222,6 +299,7 @@ export const AdminPanel: React.FC = () => {
             className="btn btn-outline"
             onClick={() => {
               sessionStorage.removeItem('mb_admin_auth');
+              sessionStorage.removeItem('mb_admin_password');
               window.location.assign('/');
             }}
           >
@@ -291,6 +369,9 @@ export const AdminPanel: React.FC = () => {
               </span>
               <span>{currency(store.totalRevenue)}</span>
               <span className="row-actions">
+                <button className="icon-button" onClick={() => loadStoreDetails(store)} title="Ver detalhes">
+                  <Store size={16} />
+                </button>
                 <button className="icon-button" onClick={() => setSelectedStore(store)} title="Editar">
                   <Edit3 size={16} />
                 </button>
@@ -302,6 +383,41 @@ export const AdminPanel: React.FC = () => {
           ))}
         </div>
       </section>
+
+      {selectedDetails && (
+        <section className="admin-details-card">
+          <header>
+            <div>
+              <h2>{selectedDetails.store.name}</h2>
+              <p>{selectedDetails.store.tenantCode} · {selectedDetails.store.ownerEmail || 'Sem e-mail'}</p>
+            </div>
+            <button className="icon-button" onClick={() => setSelectedDetails(null)}>
+              <X size={18} />
+            </button>
+          </header>
+
+          <div className="admin-details-grid">
+            <article>
+              <h3>Equipe</h3>
+              {selectedDetails.employees.slice(0, 8).map(employee => (
+                <span key={employee.id}>{employee.name} · {employee.role} · PIN {employee.pin}</span>
+              ))}
+            </article>
+            <article>
+              <h3>Cardapio</h3>
+              {selectedDetails.menuItems.slice(0, 10).map(item => (
+                <span key={item.id}>{item.name} · {item.category} · {currency(Number(item.price))}</span>
+              ))}
+            </article>
+            <article>
+              <h3>Pedidos recentes</h3>
+              {selectedDetails.orders.slice(0, 10).map(order => (
+                <span key={order.id}>Mesa {order.table_number} · {order.status} · {currency(Number(order.total))}</span>
+              ))}
+            </article>
+          </div>
+        </section>
+      )}
 
       {selectedStore && (
         <div className="modal-overlay">
