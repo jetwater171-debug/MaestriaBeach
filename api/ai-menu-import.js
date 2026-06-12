@@ -31,23 +31,33 @@ const extractJson = (text) => {
   }
 };
 
+const normalizeCategoryName = (category) => {
+  const clean = String(category || '').trim();
+  if (!clean) return '';
+  return clean.charAt(0).toUpperCase() + clean.slice(1);
+};
+
 const normalizeItems = (items, categories) => {
   const allowedCategories = Array.isArray(categories) && categories.length > 0
     ? categories.map(String)
     : ['Bebidas', 'Petiscos', 'Sobremesas', 'Outros'];
+  const outputCategories = new Set(allowedCategories);
+  const seen = new Set();
 
-  return (Array.isArray(items) ? items : [])
+  const normalizedItems = (Array.isArray(items) ? items : [])
     .map((item) => {
       const name = String(item?.name || '').trim();
       const price = Number(String(item?.price ?? '').replace(',', '.').replace(/[^\d.]/g, ''));
-      const category = allowedCategories.includes(item?.category)
-        ? item.category
-        : allowedCategories[0];
+      const suggestedCategory = normalizeCategoryName(item?.category) || allowedCategories[0];
+      const category = suggestedCategory.length > 30 ? allowedCategories[0] : suggestedCategory;
       const description = String(item?.description || '').trim();
       const confidence = Number(item?.confidence ?? 0);
+      const duplicateKey = `${name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '')}-${price.toFixed(2)}`;
 
-      if (!name || Number.isNaN(price) || price < 0) return null;
+      if (!name || Number.isNaN(price) || price < 0 || seen.has(duplicateKey)) return null;
 
+      seen.add(duplicateKey);
+      outputCategories.add(category);
       return {
         name,
         price,
@@ -58,6 +68,11 @@ const normalizeItems = (items, categories) => {
     })
     .filter(Boolean)
     .slice(0, 120);
+
+  return {
+    items: normalizedItems,
+    categories: Array.from(outputCategories)
+  };
 };
 
 export default async function handler(req, res) {
@@ -72,10 +87,22 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { imageBase64, mimeType = 'image/jpeg', categories = [] } = await readJsonBody(req);
+    const { imageBase64, mimeType = 'image/jpeg', images, categories = [] } = await readJsonBody(req);
 
-    if (!imageBase64 || typeof imageBase64 !== 'string') {
-      return res.status(400).json({ error: 'Imagem em base64 nao enviada.' });
+    const imageInputs = Array.isArray(images)
+      ? images
+      : [{ imageBase64, mimeType }];
+
+    const validImages = imageInputs
+      .map((image) => ({
+        imageBase64: image?.imageBase64,
+        mimeType: image?.mimeType || 'image/jpeg'
+      }))
+      .filter((image) => typeof image.imageBase64 === 'string' && image.imageBase64.length > 0)
+      .slice(0, 8);
+
+    if (validImages.length === 0) {
+      return res.status(400).json({ error: 'Nenhuma imagem em base64 foi enviada.' });
     }
 
     const allowedCategories = Array.isArray(categories) && categories.length > 0
@@ -85,12 +112,15 @@ export default async function handler(req, res) {
     const prompt = `
 Voce e uma IA especialista em cardapios de barracas de praia, quiosques, bares e restaurantes no Brasil.
 Analise a foto do cardapio fisico e extraia todos os produtos visiveis.
+Voce pode receber varias fotos de cardapios diferentes da mesma barraca. Consolide tudo em uma lista unica.
 
 Regras:
 - Retorne somente JSON valido, sem markdown.
-- Use exatamente esta estrutura: {"items":[{"name":"string","category":"string","price":number,"description":"string","confidence":number}]}.
-- Escolha category somente entre: ${allowedCategories.join(', ')}.
+- Use exatamente esta estrutura: {"categories":["string"],"items":[{"name":"string","category":"string","price":number,"description":"string","confidence":number}]}.
+- Categorias existentes: ${allowedCategories.join(', ')}.
+- Use categorias existentes quando fizer sentido, mas crie categorias novas se o cardapio tiver uma secao clara que nao existe.
 - Se houver preco promocional e preco normal, use o preco de venda mais provavel.
+- Se o mesmo produto aparecer em varias fotos, mantenha apenas uma versao.
 - Nao invente itens que nao aparecem na imagem.
 - Corrija acentos e capitalizacao em portugues quando estiver obvio.
 - Description deve ser curta e util, baseada no texto visivel ou no tipo do produto.
@@ -106,12 +136,12 @@ Regras:
             role: 'user',
             parts: [
               { text: prompt },
-              {
+              ...validImages.map((image) => ({
                 inline_data: {
-                  mime_type: mimeType,
-                  data: imageBase64
+                  mime_type: image.mimeType,
+                  data: image.imageBase64
                 }
-              }
+              }))
             ]
           }
         ],
@@ -132,9 +162,14 @@ Regras:
 
     const text = geminiBody?.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join('\n');
     const parsed = extractJson(text);
+    const normalized = normalizeItems(parsed.items, [
+      ...allowedCategories,
+      ...(Array.isArray(parsed.categories) ? parsed.categories.map(String) : [])
+    ]);
 
     return res.status(200).json({
-      items: normalizeItems(parsed.items, allowedCategories),
+      items: normalized.items,
+      categories: normalized.categories,
       model
     });
   } catch (error) {

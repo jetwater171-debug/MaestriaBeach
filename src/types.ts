@@ -79,3 +79,14 @@ export interface DailySale {
     cash: number;
   };
 }
+
+export interface AdminStoreSummary extends StoreInfo {
+  id: string;
+  ownerEmail?: string;
+  createdAt?: string;
+  employeesCount: number;
+  menuItemsCount: number;
+  activeOrdersCount: number;
+  completedOrdersCount: number;
+  totalRevenue: number;
+}

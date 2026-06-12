@@ -50,6 +50,11 @@ type AiMenuItem = {
   category?: string;
 };
 
+type AiMenuResponse = {
+  items?: AiMenuItem[];
+  categories?: string[];
+};
+
 const roleLabels: Record<Employee['role'], string> = {
   waiter: 'Garcom',
   kitchen: 'Cozinha',
@@ -133,6 +138,39 @@ const buildItemCode = (name: string) => {
     .toUpperCase();
 
   return letters || 'IT';
+};
+
+const normalizeTextKey = (value: string) =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+
+const buildMenuItemKey = (item: Pick<MenuItem, 'name' | 'price'>) =>
+  `${normalizeTextKey(item.name)}-${Number(item.price || 0).toFixed(2)}`;
+
+const mergeMenuItemsWithoutDuplicates = (
+  currentItems: Omit<MenuItem, 'id'>[],
+  importedItems: Omit<MenuItem, 'id'>[]
+) => {
+  const byKey = new Map<string, Omit<MenuItem, 'id'>>();
+
+  currentItems.forEach((item) => {
+    byKey.set(buildMenuItemKey(item), item);
+  });
+
+  importedItems.forEach((item) => {
+    const key = buildMenuItemKey(item);
+    const existing = byKey.get(key);
+    byKey.set(key, {
+      ...existing,
+      ...item,
+      description: item.description || existing?.description || ''
+    });
+  });
+
+  return Array.from(byKey.values());
 };
 
 const _parseMenuText = (text: string): Omit<MenuItem, 'id'>[] => {
@@ -261,7 +299,7 @@ export const Login: React.FC<LoginProps> = ({ employees, onLoginSuccess, storeNa
     { name: 'Caixa', role: 'cashier', pin: '2222' }
   ]);
   const [onboardingMenuItems, setOnboardingMenuItems] = useState<Omit<MenuItem, 'id'>[]>(starterMenu);
-  const [menuImagePreview, setMenuImagePreview] = useState('');
+  const [menuImagePreviews, setMenuImagePreviews] = useState<string[]>([]);
   const [scanProgress, setScanProgress] = useState(0);
   const [scanStatus, setScanStatus] = useState('');
   const [isScanningMenu, setIsScanningMenu] = useState(false);
@@ -446,24 +484,24 @@ export const Login: React.FC<LoginProps> = ({ employees, onLoginSuccess, storeNa
   };
 
   const handleMenuPhotoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
 
-    setMenuImagePreview(URL.createObjectURL(file));
+    setMenuImagePreviews(files.map((file) => URL.createObjectURL(file)));
     setIsScanningMenu(true);
     setScanProgress(8);
-    setScanStatus('Preparando imagem para o Gemini...');
+    setScanStatus(`Preparando ${files.length} foto(s) para o Gemini...`);
 
     try {
-      const payload = await imageFileToPayload(file);
+      const images = await Promise.all(files.slice(0, 8).map((file) => imageFileToPayload(file)));
       setScanProgress(30);
-      setScanStatus('Enviando foto para analise com Gemini...');
+      setScanStatus('Enviando cardapios para analise com Gemini...');
 
       const response = await fetch('/api/ai-menu-import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...payload,
+          images,
           categories: storeCategories
         })
       });
@@ -474,15 +512,20 @@ export const Login: React.FC<LoginProps> = ({ employees, onLoginSuccess, storeNa
       }
 
       setScanProgress(82);
-      setScanStatus('Organizando itens, precos e categorias...');
+      setScanStatus('Consolidando itens, precos, categorias e duplicados...');
 
-      const result = (await response.json()) as { items?: AiMenuItem[] };
-      const extractedItems = normalizeAiMenuItems(result.items || [], storeCategories);
+      const result = (await response.json()) as AiMenuResponse;
+      const suggestedCategories = (result.categories || [])
+        .map((category) => String(category).trim())
+        .filter(Boolean);
+      const mergedCategories = Array.from(new Set([...storeCategories, ...suggestedCategories]));
+      const extractedItems = normalizeAiMenuItems(result.items || [], mergedCategories);
       if (extractedItems.length === 0) throw new Error('Nenhum item encontrado');
 
-      setOnboardingMenuItems(extractedItems);
+      setStoreCategories(mergedCategories);
+      setOnboardingMenuItems((currentItems) => mergeMenuItemsWithoutDuplicates(currentItems, extractedItems));
       setScanProgress(100);
-      setScanStatus(`${extractedItems.length} itens importados pelo Gemini. Revise antes de ativar.`);
+      setScanStatus(`${extractedItems.length} itens analisados pelo Gemini. Categorias e duplicados foram consolidados.`);
     } catch (scanError) {
       console.warn('Falha na IA do cardapio:', scanError);
       setScanProgress(100);
@@ -975,14 +1018,19 @@ export const Login: React.FC<LoginProps> = ({ employees, onLoginSuccess, storeNa
 
               <div className="ai-menu-importer">
                 <label className="photo-dropzone">
-                  <input type="file" accept="image/*" capture="environment" onChange={handleMenuPhotoUpload} />
-                  {menuImagePreview ? (
-                    <img src={menuImagePreview} alt="Cardapio enviado" />
+                  <input type="file" accept="image/*" multiple onChange={handleMenuPhotoUpload} />
+                  {menuImagePreviews.length > 0 ? (
+                    <div className="photo-preview-stack">
+                      {menuImagePreviews.slice(0, 4).map((preview, index) => (
+                        <img key={preview} src={preview} alt={`Cardapio enviado ${index + 1}`} />
+                      ))}
+                      {menuImagePreviews.length > 4 && <strong>+{menuImagePreviews.length - 4}</strong>}
+                    </div>
                   ) : (
                     <span>
                       <Camera size={28} />
-                      Fotografar ou enviar cardapio
-                      <small>Leitura automatica de nomes e precos</small>
+                      Enviar fotos dos cardapios
+                      <small>Use uma ou varias fotos. A IA mescla tudo sem duplicar.</small>
                     </span>
                   )}
                 </label>
@@ -993,8 +1041,8 @@ export const Login: React.FC<LoginProps> = ({ employees, onLoginSuccess, storeNa
                   </span>
                   <h3>Como funciona</h3>
                   <p>
-                    A IA le a imagem, encontra linhas no formato item + preco, separa categorias e
-                    cria o cardapio editavel antes de salvar.
+                    A IA le uma ou varias imagens, identifica produtos, cria categorias novas quando
+                    necessario e mescla itens repetidos antes de salvar.
                   </p>
                   <div className="scan-progress">
                     <span style={{ width: `${scanProgress}%` }} />

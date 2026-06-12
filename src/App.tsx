@@ -34,6 +34,7 @@ import { DashboardOwner } from './components/DashboardOwner';
 import { WaiterPanel } from './components/WaiterPanel';
 import { KitchenPanel } from './components/KitchenPanel';
 import { CashierPanel } from './components/CashierPanel';
+import { AdminPanel } from './components/AdminPanel';
 
 const hexToRgb = (hex: string): string => {
   hex = hex.replace(/^#/, '');
@@ -73,7 +74,7 @@ const adjustColorBrightness = (hex: string, percent: number): string => {
   return `#${rHex}${gHex}${bHex}`;
 };
 
-function App() {
+function MainApp() {
   // Estados principais
   const [storeInfo, setStoreInfo] = useState<StoreInfo>(() => getStoreInfo());
   const [menuItems, setMenuItems] = useState<MenuItem[]>(() => getMenuItems());
@@ -541,6 +542,10 @@ function App() {
       )}
     </div>
   );
+}
+
+function App() {
+  return window.location.pathname === '/admin' ? <AdminPanel /> : <MainApp />;
 }
 
 export default App;

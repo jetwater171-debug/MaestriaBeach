@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured } from './supabaseClient';
-import { StoreInfo, MenuItem, Employee, Order, DailySale } from './types';
+import { StoreInfo, MenuItem, Employee, Order, DailySale, AdminStoreSummary } from './types';
 
 // Retorna se o Supabase está ativo para uso
 export const checkSupabase = () => isSupabaseConfigured && supabase !== null;
@@ -706,4 +706,139 @@ export const fetchSalesSupabase = async (storeId: string): Promise<DailySale[]> 
   });
 
   return Object.values(groups);
+};
+
+export const fetchAdminStores = async (): Promise<AdminStoreSummary[]> => {
+  if (!checkSupabase()) return [];
+
+  const { data: storesData, error: storesError } = await supabase!
+    .from('stores')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (storesError) {
+    console.error('Erro ao buscar barracas no admin:', storesError);
+    return [];
+  }
+
+  const { data: employeesData } = await supabase!
+    .from('employees')
+    .select('id, store_id');
+
+  const { data: menuData } = await supabase!
+    .from('menu_items')
+    .select('id, store_id');
+
+  const { data: ordersData } = await supabase!
+    .from('orders')
+    .select('id, store_id, status, total');
+
+  return (storesData || []).map(store => {
+    const storeEmployees = (employeesData || []).filter(emp => emp.store_id === store.id);
+    const storeMenuItems = (menuData || []).filter(item => item.store_id === store.id);
+    const storeOrders = (ordersData || []).filter(order => order.store_id === store.id);
+    const completedOrders = storeOrders.filter(order => order.status === 'completed');
+
+    return {
+      id: store.id,
+      name: store.name,
+      logoUrl: store.logo_url,
+      address: store.address,
+      phone: store.phone,
+      tablesCount: Number(store.tables_count || 0),
+      serviceChargePercent: Number(store.service_charge_percent || 0),
+      tenantCode: store.tenant_code,
+      themeColor: store.theme_color || 'teal',
+      categories: store.categories || ['Bebidas', 'Petiscos', 'Sobremesas'],
+      ownerEmail: store.owner_email,
+      createdAt: store.created_at,
+      employeesCount: storeEmployees.length,
+      menuItemsCount: storeMenuItems.length,
+      activeOrdersCount: storeOrders.filter(order => order.status === 'active').length,
+      completedOrdersCount: completedOrders.length,
+      totalRevenue: completedOrders.reduce((sum, order) => sum + Number(order.total || 0), 0)
+    };
+  });
+};
+
+export const updateAdminStoreSupabase = async (
+  storeId: string,
+  info: StoreInfo & { ownerEmail?: string }
+): Promise<boolean> => {
+  if (!checkSupabase()) return false;
+
+  const { error } = await supabase!
+    .from('stores')
+    .update({
+      name: info.name,
+      logo_url: info.logoUrl,
+      address: info.address,
+      phone: info.phone,
+      tables_count: info.tablesCount,
+      service_charge_percent: info.serviceChargePercent,
+      tenant_code: info.tenantCode,
+      owner_email: info.ownerEmail,
+      theme_color: info.themeColor || 'teal',
+      categories: info.categories || ['Bebidas', 'Petiscos', 'Sobremesas']
+    })
+    .eq('id', storeId);
+
+  if (error) {
+    console.error('Erro ao atualizar barraca no admin:', error);
+    return false;
+  }
+
+  return true;
+};
+
+export const deleteAdminStoreSupabase = async (storeId: string): Promise<boolean> => {
+  if (!checkSupabase()) return false;
+
+  const { data: ordersData, error: ordersFetchError } = await supabase!
+    .from('orders')
+    .select('id')
+    .eq('store_id', storeId);
+
+  if (ordersFetchError) {
+    console.error('Erro ao buscar pedidos para exclusao admin:', ordersFetchError);
+    return false;
+  }
+
+  const orderIds = (ordersData || []).map(order => order.id);
+  if (orderIds.length > 0) {
+    const { error: orderItemsError } = await supabase!
+      .from('order_items')
+      .delete()
+      .in('order_id', orderIds);
+
+    if (orderItemsError) {
+      console.error('Erro ao excluir itens de pedidos no admin:', orderItemsError);
+      return false;
+    }
+  }
+
+  const tablesToDelete = ['orders', 'menu_items', 'employees'];
+  for (const tableName of tablesToDelete) {
+    const { error } = await supabase!
+      .from(tableName)
+      .delete()
+      .eq('store_id', storeId);
+
+    if (error) {
+      console.error(`Erro ao excluir registros de ${tableName} no admin:`, error);
+      return false;
+    }
+  }
+
+  const { error: storeError } = await supabase!
+    .from('stores')
+    .delete()
+    .eq('id', storeId);
+
+  if (storeError) {
+    console.error('Erro ao excluir barraca no admin:', storeError);
+    return false;
+  }
+
+  return true;
 };
