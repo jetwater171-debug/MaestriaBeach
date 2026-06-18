@@ -89,4 +89,5 @@ export interface AdminStoreSummary extends StoreInfo {
   activeOrdersCount: number;
   completedOrdersCount: number;
   totalRevenue: number;
+  invitePending?: boolean;
 }

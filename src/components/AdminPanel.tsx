@@ -2,9 +2,11 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   Building2,
+  Copy,
   Download,
   Edit3,
   KeyRound,
+  Link2,
   RefreshCw,
   Save,
   Search,
@@ -79,6 +81,9 @@ export const AdminPanel: React.FC = () => {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [inviteClientName, setInviteClientName] = useState('');
+  const [invitePhone, setInvitePhone] = useState('');
+  const [generatedInviteUrl, setGeneratedInviteUrl] = useState('');
 
   const loadStores = useCallback(async () => {
     setLoading(true);
@@ -259,6 +264,38 @@ export const AdminPanel: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
+  const handleCreateInvite = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      const data = await adminRequest<{ inviteUrl: string }>('/api/admin-stores', password, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'create_invite',
+          clientName: inviteClientName,
+          phone: invitePhone
+        })
+      });
+
+      setGeneratedInviteUrl(data.inviteUrl);
+      setInviteClientName('');
+      setInvitePhone('');
+      await loadStores();
+    } catch (inviteError) {
+      setError(inviteError instanceof Error ? inviteError.message : 'Nao foi possivel gerar o convite.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const copyInviteUrl = async () => {
+    if (!generatedInviteUrl) return;
+    await navigator.clipboard?.writeText(generatedInviteUrl);
+    alert('Link de convite copiado.');
+  };
+
   if (!isAuthenticated) {
     return (
       <main className="admin-login-page">
@@ -348,6 +385,48 @@ export const AdminPanel: React.FC = () => {
         </article>
       </section>
 
+      <section className="admin-invite-card">
+        <div>
+          <span className="section-eyebrow">Onboarding controlado</span>
+          <h2>Criar link unico para nova barraca</h2>
+          <p>
+            Gere um link exclusivo para enviar ao dono. Ele abre uma tela de boas-vindas,
+            configura a barraca e o link deixa de funcionar depois da ativacao.
+          </p>
+        </div>
+
+        <form onSubmit={handleCreateInvite} className="admin-invite-form">
+          <label>
+            Nome do cliente ou barraca
+            <input
+              value={inviteClientName}
+              onChange={event => setInviteClientName(event.target.value)}
+              placeholder="Ex: Quiosque Mar Azul"
+            />
+          </label>
+          <label>
+            Telefone opcional
+            <input
+              value={invitePhone}
+              onChange={event => setInvitePhone(event.target.value)}
+              placeholder="WhatsApp do dono"
+            />
+          </label>
+          <button className="btn btn-primary" type="submit" disabled={loading}>
+            <Link2 size={16} /> Gerar link unico
+          </button>
+        </form>
+
+        {generatedInviteUrl && (
+          <div className="admin-invite-result">
+            <input readOnly value={generatedInviteUrl} onFocus={event => event.currentTarget.select()} />
+            <button className="btn btn-outline" type="button" onClick={copyInviteUrl}>
+              <Copy size={16} /> Copiar link
+            </button>
+          </div>
+        )}
+      </section>
+
       <section className="admin-table-card">
         <div className="admin-table-header">
           <h2>Barracas cadastradas</h2>
@@ -370,7 +449,7 @@ export const AdminPanel: React.FC = () => {
             <div className="admin-table-row" key={store.id}>
               <span>
                 <strong>{store.name}</strong>
-                <small>{store.address || 'Sem endereco'}</small>
+                <small>{store.invitePending ? 'Convite pendente de ativacao' : store.address || 'Sem endereco'}</small>
               </span>
               <span>{store.tenantCode || '-'}</span>
               <span>{store.ownerEmail || '-'}</span>

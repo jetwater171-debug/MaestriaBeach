@@ -29,7 +29,7 @@ import {
   Waves
 } from 'lucide-react';
 import { Employee, MenuItem, StoreInfo } from '../types';
-import { loginEmployee, loginOwner, registerNewStoreExtended } from '../supabaseService';
+import { claimStoreInvite, loginEmployee, loginOwner, registerNewStoreExtended } from '../supabaseService';
 
 interface LoginProps {
   employees: Employee[];
@@ -42,7 +42,7 @@ interface LoginProps {
   storeName: string;
 }
 
-type AccessMode = 'landing' | 'staff' | 'owner' | 'register';
+type AccessMode = 'landing' | 'staff' | 'owner' | 'invite-welcome' | 'register';
 type RegisterStep = 1 | 2 | 3 | 4;
 
 type AiMenuItem = {
@@ -273,7 +273,21 @@ const normalizeAiMenuItems = (items: AiMenuItem[], categories: string[]): Omit<M
 };
 
 export const Login: React.FC<LoginProps> = ({ employees, onLoginSuccess, storeName }) => {
-  const [mode, setMode] = useState<AccessMode>('landing');
+  const inviteParams = useMemo(() => {
+    const params = new URLSearchParams(window.location.search);
+    const loginMode = params.get('login');
+    const initialMode: 'owner' | 'staff' | null =
+      loginMode === 'owner' || loginMode === 'staff' ? loginMode : null;
+    return {
+      storeId: params.get('store') || '',
+      token: params.get('token') || '',
+      isInvite: window.location.pathname === '/invite' && Boolean(params.get('store')) && Boolean(params.get('token')),
+      initialMode
+    };
+  }, []);
+  const [mode, setMode] = useState<AccessMode>(
+    inviteParams.isInvite ? 'invite-welcome' : inviteParams.initialMode || 'landing'
+  );
   const [registerStep, setRegisterStep] = useState<RegisterStep>(1);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -312,6 +326,12 @@ export const Login: React.FC<LoginProps> = ({ employees, onLoginSuccess, storeNa
   );
 
   const handleModeChange = (nextMode: AccessMode) => {
+    if (nextMode === 'register' && !inviteParams.isInvite) {
+      setMode('landing');
+      setError('A criacao de barraca agora e feita por convite unico enviado pelo Maestria Beach.');
+      return;
+    }
+
     setMode(nextMode);
     setError('');
     if (nextMode === 'register') setRegisterStep(1);
@@ -431,13 +451,23 @@ export const Login: React.FC<LoginProps> = ({ employees, onLoginSuccess, storeNa
     };
 
     setLoading(true);
-    const result = await registerNewStoreExtended(
-      { ...finalStoreInfo, tenantCode: finalTenantCode },
-      newEmail.trim(),
-      newPassword,
-      onboardingEmployees,
-      onboardingMenuItems
-    );
+    const result = inviteParams.isInvite
+      ? await claimStoreInvite(
+          inviteParams.storeId,
+          inviteParams.token,
+          { ...finalStoreInfo, tenantCode: finalTenantCode },
+          newEmail.trim(),
+          newPassword,
+          onboardingEmployees,
+          onboardingMenuItems
+        )
+      : await registerNewStoreExtended(
+          { ...finalStoreInfo, tenantCode: finalTenantCode },
+          newEmail.trim(),
+          newPassword,
+          onboardingEmployees,
+          onboardingMenuItems
+        );
     setLoading(false);
 
     if (result) {
@@ -544,7 +574,7 @@ export const Login: React.FC<LoginProps> = ({ employees, onLoginSuccess, storeNa
         <span>Maestria Beach</span>
       </div>
 
-      {mode !== 'landing' && (
+      {mode !== 'landing' && mode !== 'invite-welcome' && (
         <nav className="landing-nav-links product-nav-links">
           <button className={mode === 'staff' ? 'active' : ''} onClick={() => handleModeChange('staff')} type="button">
             Login equipe
@@ -558,11 +588,13 @@ export const Login: React.FC<LoginProps> = ({ employees, onLoginSuccess, storeNa
         </nav>
       )}
 
-      <div className="nav-actions">
-        <button className="btn btn-primary landing-main-cta" onClick={() => handleModeChange('register')} type="button">
-          Criar sua Barraca
-        </button>
-      </div>
+      {mode !== 'invite-welcome' && (
+        <div className="nav-actions">
+          <button className="btn btn-primary landing-main-cta" onClick={() => handleModeChange('register')} type="button">
+            Criar sua Barraca
+          </button>
+        </div>
+      )}
     </header>
   );
 
@@ -714,6 +746,36 @@ export const Login: React.FC<LoginProps> = ({ employees, onLoginSuccess, storeNa
             {loading ? 'Validando...' : 'Abrir administracao'}
           </button>
         </form>
+      </section>
+    </main>
+  );
+
+  const inviteWelcomePage = (
+    <main className="invite-welcome-page">
+      <section className="invite-welcome-card">
+        <span className="hero-kicker">
+          <Sparkles size={16} /> Convite exclusivo Maestria Beach
+        </span>
+        <h1>Bem-vindo. Vamos montar a operacao digital da sua barraca.</h1>
+        <p>
+          Este link foi criado pelo time Maestria Beach e funciona uma unica vez. Em poucos passos voce
+          configura dados da barraca, mesas, equipe, cardapio e acessos para comecar a operar sem papel.
+        </p>
+        <div className="invite-benefits">
+          <span>
+            <Check size={16} /> Link unico e seguro
+          </span>
+          <span>
+            <UsersRound size={16} /> Equipe com acessos separados
+          </span>
+          <span>
+            <Utensils size={16} /> Cardapio manual ou com IA
+          </span>
+        </div>
+        <button className="million-cta" type="button" onClick={() => handleModeChange('register')}>
+          COMEÇAR
+          <ArrowRight size={20} />
+        </button>
       </section>
     </main>
   );
@@ -1163,9 +1225,10 @@ export const Login: React.FC<LoginProps> = ({ employees, onLoginSuccess, storeNa
           </p>
 
           <button className="million-cta" onClick={() => handleModeChange('register')} type="button">
-            Criar sua Barraca
+            Solicitar convite Maestria
             <ArrowRight size={20} />
           </button>
+          {errorMessage}
 
           <div className="million-proof-row" aria-label="Beneficios principais">
             <span>
@@ -1288,6 +1351,7 @@ export const Login: React.FC<LoginProps> = ({ employees, onLoginSuccess, storeNa
     <div className="landing-page product-landing">
       {header}
       {mode === 'landing' && landingPage}
+      {mode === 'invite-welcome' && inviteWelcomePage}
       {mode === 'staff' && staffPage}
       {mode === 'owner' && ownerPage}
       {mode === 'register' && createStorePage}

@@ -1684,6 +1684,65 @@ textarea:focus {
   font-weight: 800;
 }
 
+.invite-welcome-page {
+  min-height: calc(100vh - 66px);
+  display: grid;
+  place-items: center;
+  padding: clamp(24px, 5vw, 64px);
+  background:
+    radial-gradient(circle at 20% 20%, rgba(15, 106, 128, 0.16), transparent 28%),
+    radial-gradient(circle at 82% 28%, rgba(231, 111, 81, 0.16), transparent 30%),
+    linear-gradient(135deg, #fbfffe, #f2faf8 48%, #fff7ec);
+}
+
+.invite-welcome-card {
+  width: min(860px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 22px;
+  padding: clamp(28px, 6vw, 58px);
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 36px 90px rgba(15, 23, 42, 0.13);
+}
+
+.invite-welcome-card h1 {
+  max-width: 780px;
+  font-size: clamp(2.6rem, 7vw, 5.6rem);
+  line-height: 0.92;
+  letter-spacing: 0;
+}
+
+.invite-welcome-card p {
+  max-width: 680px;
+  color: var(--text-muted);
+  font-size: 1.06rem;
+  line-height: 1.72;
+}
+
+.invite-benefits {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+}
+
+.invite-benefits span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 12px;
+  border: 1px solid rgba(15, 106, 128, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--text-main);
+  font-size: 0.86rem;
+  font-weight: 850;
+}
+
 .create-store-page {
   display: grid;
   grid-template-columns: 340px minmax(0, 1fr);
@@ -2046,6 +2105,67 @@ textarea:focus {
 
 .admin-table-card {
   padding: 18px;
+}
+
+.admin-invite-card {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(340px, 1.1fr);
+  gap: 18px;
+  align-items: end;
+  padding: 22px;
+  margin-bottom: 18px;
+  border: 1px solid rgba(15, 106, 128, 0.12);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 12% 16%, rgba(231, 111, 81, 0.12), transparent 28%),
+    rgba(255, 255, 255, 0.9);
+  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+}
+
+.admin-invite-card h2 {
+  margin-top: 10px;
+  font-size: 1.6rem;
+}
+
+.admin-invite-card p {
+  color: var(--text-muted);
+  line-height: 1.55;
+  margin-top: 8px;
+}
+
+.admin-invite-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.admin-invite-form label,
+.admin-invite-result {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.admin-invite-form input,
+.admin-invite-result input {
+  min-height: 42px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 0 12px;
+  background: #fff;
+  color: var(--text-main);
+}
+
+.admin-invite-result {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  margin-top: 12px;
 }
 
 .admin-details-card {
@@ -3725,10 +3845,26 @@ textarea {
   }
 
   .admin-topbar,
-  .admin-table-header {
+  .admin-table-header,
+  .admin-invite-card,
+  .admin-invite-form,
+  .admin-invite-result {
     display: grid !important;
     grid-template-columns: 1fr !important;
     gap: 0.75rem !important;
+  }
+
+  .invite-welcome-card {
+    border-radius: 18px !important;
+    padding: 24px !important;
+  }
+
+  .invite-welcome-card h1 {
+    font-size: clamp(2.25rem, 12vw, 3.4rem) !important;
+  }
+
+  .invite-benefits {
+    grid-template-columns: 1fr !important;
   }
 
   .admin-table {

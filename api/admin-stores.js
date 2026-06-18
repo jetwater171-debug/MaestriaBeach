@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import crypto from 'crypto';
 
 const readJsonBody = async (req) => {
   if (req.body && typeof req.body === 'object') return req.body;
@@ -37,6 +38,17 @@ const getSupabaseAdmin = () => {
   });
 };
 
+const sha256 = (value) => crypto.createHash('sha256').update(value).digest('hex');
+
+const randomToken = () => crypto.randomBytes(32).toString('hex');
+
+const buildInviteUrl = (req, storeId, token) => {
+  const protocol = req.headers['x-forwarded-proto'] || 'https';
+  const host = req.headers['x-forwarded-host'] || req.headers.host;
+  const origin = req.headers.origin || `${protocol}://${host}`;
+  return `${origin}/invite?store=${encodeURIComponent(storeId)}&token=${encodeURIComponent(token)}`;
+};
+
 const normalizeStore = (store, employeesData = [], menuData = [], ordersData = []) => {
   const storeEmployees = employeesData.filter(emp => emp.store_id === store.id);
   const storeMenuItems = menuData.filter(item => item.store_id === store.id);
@@ -60,7 +72,8 @@ const normalizeStore = (store, employeesData = [], menuData = [], ordersData = [
     menuItemsCount: storeMenuItems.length,
     activeOrdersCount: storeOrders.filter(order => order.status === 'active').length,
     completedOrdersCount: completedOrders.length,
-    totalRevenue: completedOrders.reduce((sum, order) => sum + Number(order.total || 0), 0)
+    totalRevenue: completedOrders.reduce((sum, order) => sum + Number(order.total || 0), 0),
+    invitePending: String(store.owner_password || '').startsWith('invite:')
   };
 };
 
@@ -81,6 +94,39 @@ const listStores = async (supabase) => {
   return (storesData || []).map(store =>
     normalizeStore(store, employeesData || [], menuData || [], ordersData || [])
   );
+};
+
+const createInvite = async (supabase, req, body) => {
+  const token = randomToken();
+  const tenantCode = `INV${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+  const label = String(body.clientName || body.name || '').trim();
+  const inviteEmail = `invite-${crypto.randomBytes(8).toString('hex')}@maestriabeach.local`;
+
+  const { data: store, error } = await supabase
+    .from('stores')
+    .insert([{
+      name: label ? `Convite pendente - ${label}` : 'Convite pendente',
+      tenant_code: tenantCode,
+      owner_email: inviteEmail,
+      owner_password: `invite:${sha256(token)}`,
+      tables_count: 1,
+      service_charge_percent: 10,
+      logo_url: 'MB',
+      address: 'Aguardando ativacao pelo dono da barraca',
+      phone: String(body.phone || ''),
+      theme_color: 'teal',
+      categories: ['Bebidas', 'Petiscos', 'Sobremesas', 'Outros']
+    }])
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  return {
+    store: normalizeStore(store),
+    inviteUrl: buildInviteUrl(req, store.id, token),
+    token
+  };
 };
 
 const getStoreDetails = async (supabase, storeId) => {
@@ -182,6 +228,15 @@ export default async function handler(req, res) {
       return res.status(200).json({ stores: await listStores(supabase) });
     }
 
+    if (req.method === 'POST') {
+      const body = await readJsonBody(req);
+      if (body.action !== 'create_invite') {
+        return res.status(400).json({ error: 'Acao admin invalida.' });
+      }
+
+      return res.status(201).json(await createInvite(supabase, req, body));
+    }
+
     if (req.method === 'PATCH') {
       if (!storeId) return res.status(400).json({ error: 'ID da barraca obrigatorio.' });
       const body = await readJsonBody(req);
@@ -195,7 +250,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
-    res.setHeader('Allow', 'GET, PATCH, DELETE');
+    res.setHeader('Allow', 'GET, POST, PATCH, DELETE');
     return res.status(405).json({ error: 'Metodo nao permitido.' });
   } catch (error) {
     console.error('Erro no admin-stores:', error);

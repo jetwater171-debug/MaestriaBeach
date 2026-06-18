@@ -245,6 +245,42 @@ export const registerNewStoreExtended = async (
   }
 };
 
+export const claimStoreInvite = async (
+  storeId: string,
+  token: string,
+  storeDataInput: Omit<StoreInfo, 'tenantCode'> & { tenantCode: string },
+  ownerEmail: string,
+  ownerPasswordStr: string,
+  employeesInput: Omit<Employee, 'id'>[],
+  menuItemsInput: Omit<MenuItem, 'id'>[]
+): Promise<{ store: StoreInfo; employee: Employee; storeId: string } | null> => {
+  try {
+    const response = await fetch('/api/claim-store-invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        storeId,
+        token,
+        storeData: storeDataInput,
+        ownerEmail,
+        ownerPassword: ownerPasswordStr,
+        employeesInput,
+        menuItemsInput
+      })
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || 'Nao foi possivel ativar o convite.');
+    }
+
+    return data;
+  } catch (err: any) {
+    alert(err.message || 'Erro ao ativar convite.');
+    return null;
+  }
+};
+
 // 2. Login do Dono (E-mail e Senha)
 export const loginOwner = async (
   email: string,
