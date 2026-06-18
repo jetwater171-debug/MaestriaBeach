@@ -1,20 +1,24 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Activity,
   ArrowLeft,
+  BarChart3,
   Building2,
+  CalendarDays,
+  ClipboardList,
   Copy,
   Download,
   Edit3,
+  Eye,
   KeyRound,
   Link2,
   RefreshCw,
   Save,
   Search,
   ShieldCheck,
-  Store,
+  Trophy,
   Trash2,
   Users,
-  Utensils,
   X
 } from 'lucide-react';
 import { AdminStoreSummary, StoreInfo } from '../types';
@@ -24,7 +28,7 @@ type AdminStoreDetails = {
   store: AdminStoreSummary;
   employees: Array<{ id: string; name: string; role: string; pin: string }>;
   menuItems: Array<{ id: string; name: string; category: string; price: number; is_available?: boolean }>;
-  orders: Array<{ id: string; table_number: number; status: string; total: number; created_at: string }>;
+  orders: Array<{ id: string; table_number: number; status: string; total: number; created_at: string; order_items?: unknown[] }>;
 };
 
 const buildLocalAdminStore = (): AdminStoreSummary => {
@@ -49,6 +53,16 @@ const buildLocalAdminStore = (): AdminStoreSummary => {
 
 const currency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
+
+const formatDateTime = (date?: string) => {
+  if (!date) return 'Sem data';
+  return new Date(date).toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
 
 const adminRequest = async <T,>(
   path: string,
@@ -125,11 +139,45 @@ export const AdminPanel: React.FC = () => {
         employees: acc.employees + store.employeesCount,
         menuItems: acc.menuItems + store.menuItemsCount,
         activeOrders: acc.activeOrders + store.activeOrdersCount,
+        completedOrders: acc.completedOrders + store.completedOrdersCount,
+        pendingInvites: acc.pendingInvites + (store.invitePending ? 1 : 0),
         revenue: acc.revenue + store.totalRevenue
       }),
-      { stores: 0, employees: 0, menuItems: 0, activeOrders: 0, revenue: 0 }
+      { stores: 0, employees: 0, menuItems: 0, activeOrders: 0, completedOrders: 0, pendingInvites: 0, revenue: 0 }
     );
   }, [stores]);
+
+  const storeRankings = useMemo(() => {
+    const withOrderCount = stores.map(store => ({
+      ...store,
+      totalOrdersCount: store.activeOrdersCount + store.completedOrdersCount
+    }));
+
+    return {
+      byOrders: [...withOrderCount].sort((a, b) => b.totalOrdersCount - a.totalOrdersCount).slice(0, 5),
+      byRevenue: [...withOrderCount].sort((a, b) => b.totalRevenue - a.totalRevenue).slice(0, 5),
+      needsAttention: withOrderCount
+        .filter(store => store.invitePending || store.activeOrdersCount > 0 || store.employeesCount === 0 || store.menuItemsCount === 0)
+        .sort((a, b) => Number(b.invitePending) - Number(a.invitePending) || b.activeOrdersCount - a.activeOrdersCount)
+        .slice(0, 5)
+    };
+  }, [stores]);
+
+  const selectedDetailsStats = useMemo(() => {
+    if (!selectedDetails) return null;
+    const completed = selectedDetails.orders.filter(order => order.status === 'completed');
+    const active = selectedDetails.orders.filter(order => order.status === 'active');
+    const revenue = completed.reduce((sum, order) => sum + Number(order.total || 0), 0);
+    const averageTicket = completed.length > 0 ? revenue / completed.length : 0;
+
+    return {
+      active: active.length,
+      completed: completed.length,
+      revenue,
+      averageTicket,
+      lastOrder: selectedDetails.orders[0]?.created_at
+    };
+  }, [selectedDetails]);
 
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -332,8 +380,9 @@ export const AdminPanel: React.FC = () => {
     <main className="admin-shell">
       <header className="admin-topbar">
         <div>
-          <span className="section-eyebrow">Admin interno</span>
-          <h1>Controle das barracas</h1>
+          <span className="section-eyebrow">Command center Maestria</span>
+          <h1>Painel administrativo</h1>
+          <p>Controle total das barracas, convites, operacao, receita e crescimento da rede.</p>
         </div>
         <div className="admin-actions">
           <button className="btn btn-outline" onClick={loadStores} disabled={loading}>
@@ -362,26 +411,92 @@ export const AdminPanel: React.FC = () => {
           <Building2 size={20} />
           <span>Barracas</span>
           <strong>{totals.stores}</strong>
+          <small>{totals.pendingInvites} convite(s) pendente(s)</small>
+        </article>
+        <article>
+          <ClipboardList size={20} />
+          <span>Pedidos totais</span>
+          <strong>{totals.completedOrders + totals.activeOrders}</strong>
+          <small>{totals.activeOrders} ativo(s) agora</small>
         </article>
         <article>
           <Users size={20} />
-          <span>Funcionarios</span>
+          <span>Equipe cadastrada</span>
           <strong>{totals.employees}</strong>
+          <small>{totals.menuItems} itens nos cardapios</small>
         </article>
         <article>
-          <Utensils size={20} />
-          <span>Itens no cardapio</span>
-          <strong>{totals.menuItems}</strong>
+          <Activity size={20} />
+          <span>Barracas operando</span>
+          <strong>{stores.filter(store => !store.invitePending).length}</strong>
+          <small>{stores.filter(store => store.activeOrdersCount > 0).length} com pedidos ativos</small>
         </article>
         <article>
-          <ShieldCheck size={20} />
-          <span>Pedidos ativos</span>
-          <strong>{totals.activeOrders}</strong>
-        </article>
-        <article>
-          <Download size={20} />
+          <BarChart3 size={20} />
           <span>Receita fechada</span>
           <strong>{currency(totals.revenue)}</strong>
+          <small>{totals.completedOrders} pedido(s) fechado(s)</small>
+        </article>
+      </section>
+
+      <section className="admin-command-grid">
+        <article className="admin-rank-panel featured">
+          <div className="admin-panel-heading">
+            <span><Trophy size={16} /> Mais pedidos</span>
+            <small>Ranking por pedidos ativos + fechados</small>
+          </div>
+          <div className="admin-ranking-list">
+            {storeRankings.byOrders.map((store, index) => (
+              <button key={store.id} type="button" onClick={() => loadStoreDetails(store)}>
+                <b>{index + 1}</b>
+                <span>
+                  <strong>{store.name}</strong>
+                  <small>{store.activeOrdersCount + store.completedOrdersCount} pedidos - {store.activeOrdersCount} ativos</small>
+                </span>
+                <em>{store.tenantCode || 'sem codigo'}</em>
+              </button>
+            ))}
+          </div>
+        </article>
+
+        <article className="admin-rank-panel">
+          <div className="admin-panel-heading">
+            <span><BarChart3 size={16} /> Maior receita</span>
+            <small>Barracas com mais faturamento fechado</small>
+          </div>
+          <div className="admin-ranking-list compact">
+            {storeRankings.byRevenue.map((store, index) => (
+              <button key={store.id} type="button" onClick={() => loadStoreDetails(store)}>
+                <b>{index + 1}</b>
+                <span>
+                  <strong>{store.name}</strong>
+                  <small>{store.completedOrdersCount} pedidos fechados</small>
+                </span>
+                <em>{currency(store.totalRevenue)}</em>
+              </button>
+            ))}
+          </div>
+        </article>
+
+        <article className="admin-rank-panel attention">
+          <div className="admin-panel-heading">
+            <span><ShieldCheck size={16} /> Precisa atencao</span>
+            <small>Convites, cardapio vazio ou operacao ativa</small>
+          </div>
+          <div className="admin-ranking-list compact">
+            {storeRankings.needsAttention.length === 0 ? (
+              <p className="admin-empty-state">Tudo sob controle agora.</p>
+            ) : storeRankings.needsAttention.map(store => (
+              <button key={store.id} type="button" onClick={() => loadStoreDetails(store)}>
+                <b>{store.invitePending ? '!' : store.activeOrdersCount}</b>
+                <span>
+                  <strong>{store.name}</strong>
+                  <small>{store.invitePending ? 'Convite ainda nao ativado' : `${store.activeOrdersCount} pedidos ativos`}</small>
+                </span>
+                <em>{store.menuItemsCount} itens</em>
+              </button>
+            ))}
+          </div>
         </article>
       </section>
 
@@ -441,25 +556,38 @@ export const AdminPanel: React.FC = () => {
             <span>Barraca</span>
             <span>Codigo</span>
             <span>Dono</span>
-            <span>Operacao</span>
+            <span>Pedidos</span>
             <span>Receita</span>
             <span>Acoes</span>
           </div>
           {filteredStores.map(store => (
-            <div className="admin-table-row" key={store.id}>
-              <span>
-                <strong>{store.name}</strong>
-                <small>{store.invitePending ? 'Convite pendente de ativacao' : store.address || 'Sem endereco'}</small>
+            <div className={`admin-table-row ${store.invitePending ? 'pending' : ''}`} key={store.id}>
+              <span className="admin-store-cell">
+                <i>{store.logoUrl || 'MB'}</i>
+                <span>
+                  <strong>{store.name}</strong>
+                  <small>{store.invitePending ? 'Convite pendente de ativacao' : store.address || 'Sem endereco'}</small>
+                </span>
               </span>
-              <span>{store.tenantCode || '-'}</span>
-              <span>{store.ownerEmail || '-'}</span>
               <span>
-                {store.tablesCount} mesas · {store.employeesCount} equipe · {store.menuItemsCount} itens
+                <strong>{store.tenantCode || '-'}</strong>
+                <small>{store.tablesCount} mesa(s)</small>
               </span>
-              <span>{currency(store.totalRevenue)}</span>
+              <span>
+                <strong>{store.ownerEmail || '-'}</strong>
+                <small>{store.phone || 'sem telefone'}</small>
+              </span>
+              <span className="admin-order-pill">
+                <strong>{store.completedOrdersCount + store.activeOrdersCount}</strong>
+                <small>{store.activeOrdersCount} ativos - {store.completedOrdersCount} fechados</small>
+              </span>
+              <span>
+                <strong>{currency(store.totalRevenue)}</strong>
+                <small>{store.employeesCount} equipe - {store.menuItemsCount} itens</small>
+              </span>
               <span className="row-actions">
                 <button className="icon-button" onClick={() => loadStoreDetails(store)} title="Ver detalhes">
-                  <Store size={16} />
+                  <Eye size={16} />
                 </button>
                 <button className="icon-button" onClick={() => setSelectedStore(store)} title="Editar">
                   <Edit3 size={16} />
@@ -478,30 +606,65 @@ export const AdminPanel: React.FC = () => {
           <header>
             <div>
               <h2>{selectedDetails.store.name}</h2>
-              <p>{selectedDetails.store.tenantCode} · {selectedDetails.store.ownerEmail || 'Sem e-mail'}</p>
+              <p>{selectedDetails.store.tenantCode} - {selectedDetails.store.ownerEmail || 'Sem e-mail'} - {selectedDetails.store.address || 'Sem endereco'}</p>
             </div>
-            <button className="icon-button" onClick={() => setSelectedDetails(null)}>
-              <X size={18} />
-            </button>
+            <div className="row-actions">
+              <button className="btn btn-outline" type="button" onClick={() => setSelectedStore(selectedDetails.store)}>
+                <Edit3 size={16} /> Editar
+              </button>
+              <button className="icon-button" onClick={() => setSelectedDetails(null)}>
+                <X size={18} />
+              </button>
+            </div>
           </header>
+
+          {selectedDetailsStats && (
+            <div className="admin-detail-metrics">
+              <article>
+                <ClipboardList size={17} />
+                <span>Pedidos ativos</span>
+                <strong>{selectedDetailsStats.active}</strong>
+              </article>
+              <article>
+                <ShieldCheck size={17} />
+                <span>Pedidos fechados</span>
+                <strong>{selectedDetailsStats.completed}</strong>
+              </article>
+              <article>
+                <BarChart3 size={17} />
+                <span>Receita</span>
+                <strong>{currency(selectedDetailsStats.revenue)}</strong>
+              </article>
+              <article>
+                <Activity size={17} />
+                <span>Ticket medio</span>
+                <strong>{currency(selectedDetailsStats.averageTicket)}</strong>
+              </article>
+              <article>
+                <CalendarDays size={17} />
+                <span>Ultimo pedido</span>
+                <strong>{formatDateTime(selectedDetailsStats.lastOrder)}</strong>
+              </article>
+            </div>
+          )}
 
           <div className="admin-details-grid">
             <article>
               <h3>Equipe</h3>
-              {selectedDetails.employees.slice(0, 8).map(employee => (
-                <span key={employee.id}>{employee.name} · {employee.role} · PIN {employee.pin}</span>
+              {selectedDetails.employees.length === 0 ? <span>Nenhum funcionario cadastrado.</span> : selectedDetails.employees.slice(0, 8).map(employee => (
+                <span key={employee.id}>{employee.name} - {employee.role} - PIN {employee.pin}</span>
               ))}
             </article>
             <article>
               <h3>Cardapio</h3>
-              {selectedDetails.menuItems.slice(0, 10).map(item => (
-                <span key={item.id}>{item.name} · {item.category} · {currency(Number(item.price))}</span>
+              {selectedDetails.menuItems.length === 0 ? <span>Nenhum item cadastrado.</span> : selectedDetails.menuItems.slice(0, 10).map(item => (
+                <span key={item.id}>{item.name} - {item.category} - {currency(Number(item.price))}</span>
               ))}
             </article>
             <article>
               <h3>Pedidos recentes</h3>
-              {selectedDetails.orders.slice(0, 10).map(order => (
-                <span key={order.id}>Mesa {order.table_number} · {order.status} · {currency(Number(order.total))}</span>
+              {selectedDetails.orders.length === 0 ? <span>Nenhum pedido registrado.</span> : selectedDetails.orders.slice(0, 10).map(order => (
+                <span key={order.id}>Mesa {order.table_number} - {order.status} - {currency(Number(order.total))} - {formatDateTime(order.created_at)}</span>
               ))}
             </article>
           </div>
