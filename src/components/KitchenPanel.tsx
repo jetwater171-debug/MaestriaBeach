@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Order, Employee, MenuItem } from '../types';
-import { Clock, CheckCircle, Flame, LogOut, Coffee, Volume2, ShieldAlert } from 'lucide-react';
+import { Clock, CheckCircle, Flame, LogOut, Coffee, Volume2, ShieldAlert, AlertTriangle } from 'lucide-react';
+import { getSlowOrderItems } from '../operationsAnalytics';
 
 interface KitchenPanelProps {
   kitchenUser: Employee;
@@ -139,6 +140,7 @@ export const KitchenPanel: React.FC<KitchenPanelProps> = ({
   };
 
   const kitchenOrders = getFilteredKitchenOrders();
+  const slowKitchenItems = getSlowOrderItems(orders, 20);
 
   // Mudar status de um item
   const handleUpdateItemStatus = (orderId: string, itemId: string, newStatus: 'preparing' | 'ready') => {
@@ -149,7 +151,9 @@ export const KitchenPanel: React.FC<KitchenPanelProps> = ({
       if (item.id === itemId) {
         return { 
           ...item, 
-          status: newStatus === 'ready' ? 'ready' as const : 'preparing' as const
+          status: newStatus === 'ready' ? 'ready' as const : 'preparing' as const,
+          preparingAt: item.preparingAt || new Date().toISOString(),
+          readyAt: newStatus === 'ready' ? new Date().toISOString() : item.readyAt
         };
       }
       return item;
@@ -179,7 +183,9 @@ export const KitchenPanel: React.FC<KitchenPanelProps> = ({
         if (item.status === 'pending' || (newStatus === 'ready' && item.status === 'preparing')) {
           return { 
             ...item, 
-            status: newStatus === 'ready' ? 'ready' as const : 'preparing' as const
+            status: newStatus === 'ready' ? 'ready' as const : 'preparing' as const,
+            preparingAt: item.preparingAt || new Date().toISOString(),
+            readyAt: newStatus === 'ready' ? new Date().toISOString() : item.readyAt
           };
         }
       }
@@ -347,6 +353,14 @@ export const KitchenPanel: React.FC<KitchenPanelProps> = ({
             <span>
               O navegador bloqueia som automático. Por favor, clique em <strong>"Som Mudo 🔕"</strong> no topo para ativar os avisos sonoros de novos pedidos.
             </span>
+          </div>
+        )}
+
+        {slowKitchenItems.length > 0 && (
+          <div className="delay-alert" role="status" style={{ marginBottom: '1.5rem' }}>
+            <AlertTriangle size={18} />
+            <strong>{slowKitchenItems.length} item(ns) acima de 20 min</strong>
+            <span>Mesa {slowKitchenItems[0].tableNumber}: {slowKitchenItems[0].item.name} esta ha {slowKitchenItems[0].minutes} min sem sair.</span>
           </div>
         )}
 

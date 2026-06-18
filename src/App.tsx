@@ -77,6 +77,64 @@ const adjustColorBrightness = (hex: string, percent: number): string => {
   return `#${rHex}${gHex}${bHex}`;
 };
 
+type OfflineOrderQueueItem = {
+  id: string;
+  storeId: string;
+  action: 'add' | 'update';
+  order: Order;
+  createdAt: string;
+};
+
+type StockRecord = {
+  trackStock?: boolean;
+  stockQuantity?: number;
+};
+
+const OFFLINE_QUEUE_KEY = 'mb_offline_order_queue';
+
+const getStockKey = (storeId: string) => `mb_stock_${storeId || 'local'}`;
+
+const readOfflineQueue = (): OfflineOrderQueueItem[] => {
+  try {
+    return JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || '[]');
+  } catch {
+    return [];
+  }
+};
+
+const writeOfflineQueue = (queue: OfflineOrderQueueItem[]) => {
+  localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
+};
+
+const readStockRecords = (storeId: string): Record<string, StockRecord> => {
+  try {
+    return JSON.parse(localStorage.getItem(getStockKey(storeId)) || '{}');
+  } catch {
+    return {};
+  }
+};
+
+const writeStockRecords = (storeId: string, items: MenuItem[]) => {
+  const records = items.reduce<Record<string, StockRecord>>((acc, item) => {
+    if (item.trackStock || item.stockQuantity !== undefined) {
+      acc[item.id] = {
+        trackStock: item.trackStock,
+        stockQuantity: item.stockQuantity
+      };
+    }
+    return acc;
+  }, {});
+  localStorage.setItem(getStockKey(storeId), JSON.stringify(records));
+};
+
+const mergeStockRecords = (storeId: string, items: MenuItem[]) => {
+  const records = readStockRecords(storeId);
+  return items.map(item => ({
+    ...item,
+    ...(records[item.id] || {})
+  }));
+};
+
 function MainApp() {
   // Estados principais
   const [storeInfo, setStoreInfo] = useState<StoreInfo>(() => getStoreInfo());
@@ -92,12 +150,14 @@ function MainApp() {
   
   // Estado de conexão ativa
   const [dbMode, setDbMode] = useState<'supabase' | 'local'>('local');
+  const [isOnline, setIsOnline] = useState(() => typeof navigator === 'undefined' ? true : navigator.onLine);
+  const [offlineQueueCount, setOfflineQueueCount] = useState(() => readOfflineQueue().length);
 
   // Auxiliar para carregar dados de uma loja do Supabase sob demanda
   const loadStoreData = async (storeId: string) => {
     try {
       const items = await fetchMenuItems(storeId);
-      setMenuItems(items);
+      setMenuItems(mergeStockRecords(storeId, items));
 
       const emps = await fetchEmployees(storeId);
       setEmployees(emps);
@@ -217,7 +277,7 @@ function MainApp() {
     const loadLocalFallback = () => {
       initializeLocalStorage();
       setStoreInfo(getStoreInfo());
-      setMenuItems(getMenuItems());
+      setMenuItems(mergeStockRecords('local', getMenuItems()));
       setEmployees(getEmployees());
       setOrders(getOrders());
       setSales(getSales());
@@ -262,7 +322,7 @@ function MainApp() {
         { event: '*', schema: 'public', table: 'menu_items', filter: `store_id=eq.${currentStoreId}` }, 
         async () => {
           console.log('Realtime: Atualização do Cardápio recebida.');
-          setMenuItems(await fetchMenuItems(currentStoreId));
+          setMenuItems(mergeStockRecords(currentStoreId, await fetchMenuItems(currentStoreId)));
         }
       )
       .subscribe();
@@ -294,7 +354,7 @@ function MainApp() {
 
     const handleStorage = (e: StorageEvent) => {
       if (e.key === 'mb_orders') setOrders(getOrders());
-      if (e.key === 'mb_menu_items') setMenuItems(getMenuItems());
+      if (e.key === 'mb_menu_items') setMenuItems(mergeStockRecords(currentStoreId, getMenuItems()));
       if (e.key === 'mb_employees') setEmployees(getEmployees());
       if (e.key === 'mb_store_info') setStoreInfo(getStoreInfo());
       if (e.key === 'mb_sales') setSales(getSales());
@@ -309,6 +369,7 @@ function MainApp() {
     if (dbMode !== 'supabase' || currentStoreId === 'local' || currentRole === 'login') return;
 
     const interval = setInterval(() => {
+      if (!navigator.onLine) return;
       loadStoreData(currentStoreId);
     }, 5000); // Executa a cada 5 segundos
 
@@ -324,7 +385,7 @@ function MainApp() {
       console.log('Sincronização manual do Supabase finalizada!');
     } else {
       setStoreInfo(getStoreInfo());
-      setMenuItems(getMenuItems());
+      setMenuItems(mergeStockRecords(currentStoreId, getMenuItems()));
       setEmployees(getEmployees());
       setOrders(getOrders());
       setSales(getSales());
@@ -381,6 +442,8 @@ function MainApp() {
   };
 
   const handleUpdateMenuItems = async (items: MenuItem[]) => {
+    writeStockRecords(currentStoreId, items);
+
     if (dbMode === 'supabase' && currentStoreId !== 'local') {
       const previousById = new Map(menuItems.map(item => [item.id, item]));
       const nextIds = new Set(items.map(item => item.id));
@@ -404,8 +467,9 @@ function MainApp() {
         }
       }
 
-      setMenuItems(await fetchMenuItems(currentStoreId));
+      setMenuItems(mergeStockRecords(currentStoreId, await fetchMenuItems(currentStoreId)));
     } else {
+      writeStockRecords(currentStoreId, items);
       saveMenuItems(items);
       setMenuItems(items);
     }
@@ -442,43 +506,160 @@ function MainApp() {
     }
   };
 
-  const handleAddOrder = async (order: Order) => {
-    // Adiciona otimisticamente ao estado local para resposta instantânea
-    setOrders(prev => [...prev, order]);
+  const queueOrderForSync = (order: Order, action: 'add' | 'update' = 'update') => {
+    if (currentStoreId === 'local') return;
+    const existing = readOfflineQueue().find(item => item.storeId === currentStoreId && item.order.id === order.id);
+    const queue = readOfflineQueue().filter(item => !(item.storeId === currentStoreId && item.order.id === order.id));
+    queue.push({
+      id: `${currentStoreId}_${order.id}_${Date.now()}`,
+      storeId: currentStoreId,
+      action: existing?.action === 'add' ? 'add' : action,
+      order,
+      createdAt: new Date().toISOString()
+    });
+    writeOfflineQueue(queue);
+    setOfflineQueueCount(queue.length);
+  };
+
+  const applyStockDeltaForOrder = (nextOrder: Order, previousOrder?: Order) => {
+    const previousQuantities = new Map<string, number>();
+    previousOrder?.items.forEach(item => {
+      previousQuantities.set(item.menuItemId, (previousQuantities.get(item.menuItemId) || 0) + item.quantity);
+    });
+
+    const nextQuantities = new Map<string, number>();
+    nextOrder.items.forEach(item => {
+      nextQuantities.set(item.menuItemId, (nextQuantities.get(item.menuItemId) || 0) + item.quantity);
+    });
+
+    let changed = false;
+    const nextMenuItems = menuItems.map(item => {
+      if (!item.trackStock) return item;
+      const delta = (nextQuantities.get(item.id) || 0) - (previousQuantities.get(item.id) || 0);
+      if (delta === 0) return item;
+
+      const stockQuantity = Math.max(0, (item.stockQuantity ?? 0) - delta);
+      changed = true;
+      return {
+        ...item,
+        stockQuantity,
+        isAvailable: stockQuantity > 0
+      };
+    });
+
+    if (!changed) return;
+
+    writeStockRecords(currentStoreId, nextMenuItems);
+    if (dbMode === 'local') saveMenuItems(nextMenuItems);
+    setMenuItems(nextMenuItems);
 
     if (dbMode === 'supabase' && currentStoreId !== 'local') {
+      nextMenuItems
+        .filter(item => item.trackStock)
+        .forEach(item => {
+          const previous = menuItems.find(menuItem => menuItem.id === item.id);
+          if (previous?.isAvailable !== item.isAvailable) {
+            updateMenuItemSupabase(currentStoreId, item);
+          }
+        });
+    }
+  };
+
+  const syncOfflineQueue = async () => {
+    if (dbMode !== 'supabase' || currentStoreId === 'local' || !navigator.onLine) return;
+
+    const queue = readOfflineQueue().filter(item => item.storeId === currentStoreId);
+    if (queue.length === 0) {
+      setOfflineQueueCount(readOfflineQueue().length);
+      return;
+    }
+
+    const remaining = readOfflineQueue().filter(item => item.storeId !== currentStoreId);
+    let syncedAny = false;
+
+    for (const queued of queue) {
+      if (queued.action === 'add') {
+        const inserted = await addOrderSupabase(currentStoreId, queued.order);
+        const recoveredWithUpdate = inserted ? true : await updateOrderSupabase(currentStoreId, queued.order);
+        if (recoveredWithUpdate) {
+          syncedAny = true;
+        } else {
+          remaining.push(queued);
+        }
+      } else {
+        const updated = await updateOrderSupabase(currentStoreId, queued.order);
+        if (!updated) {
+          const inserted = await addOrderSupabase(currentStoreId, queued.order);
+          if (!inserted) {
+            remaining.push(queued);
+          } else {
+            syncedAny = true;
+          }
+        } else {
+          syncedAny = true;
+        }
+      }
+    }
+
+    writeOfflineQueue(remaining);
+    setOfflineQueueCount(remaining.length);
+
+    if (syncedAny) {
+      setOrders(await fetchOrders(currentStoreId));
+      setSales(await fetchSalesSupabase(currentStoreId));
+    }
+  };
+
+  const handleAddOrder = async (order: Order) => {
+    // Adiciona otimisticamente ao estado local para resposta instantânea
+    const nextOrders = [...orders, order];
+    applyStockDeltaForOrder(order);
+    setOrders(nextOrders);
+    saveOrders(nextOrders);
+
+    if (dbMode === 'supabase' && currentStoreId !== 'local') {
+      if (!navigator.onLine) {
+        queueOrderForSync(order, 'add');
+        return;
+      }
+
       const success = await addOrderSupabase(currentStoreId, order);
       if (success) {
         const dbOrders = await fetchOrders(currentStoreId);
         setOrders(dbOrders);
       } else {
-        // Remove em caso de erro
-        setOrders(prev => prev.filter(o => o.id !== order.id));
-        alert('Erro ao registrar o pedido no servidor. Por favor, tente novamente.');
+        queueOrderForSync(order, 'add');
       }
     } else {
-      const updated = [...orders, order];
-      saveOrders(updated);
-      setOrders(updated);
+      saveOrders(nextOrders);
+      setOrders(nextOrders);
     }
   };
 
   const handleUpdateOrder = async (updatedOrder: Order) => {
     // Atualização otimista local
-    setOrders(prev => prev.map(o => o.id === updatedOrder.id ? updatedOrder : o));
+    const previousOrder = orders.find(o => o.id === updatedOrder.id);
+    const nextOrders = orders.map(o => o.id === updatedOrder.id ? updatedOrder : o);
+    applyStockDeltaForOrder(updatedOrder, previousOrder);
+    setOrders(nextOrders);
+    saveOrders(nextOrders);
 
     if (dbMode === 'supabase' && currentStoreId !== 'local') {
+      if (!navigator.onLine) {
+        queueOrderForSync(updatedOrder);
+        return;
+      }
+
       const success = await updateOrderSupabase(currentStoreId, updatedOrder);
       if (success) {
         const dbOrders = await fetchOrders(currentStoreId);
         setOrders(dbOrders);
       } else {
-        alert('Erro ao atualizar o pedido no servidor. Por favor, tente novamente.');
+        queueOrderForSync(updatedOrder);
       }
     } else {
-      const updated = orders.map(o => o.id === updatedOrder.id ? updatedOrder : o);
-      saveOrders(updated);
-      setOrders(updated);
+      saveOrders(nextOrders);
+      setOrders(nextOrders);
     }
   };
 
@@ -502,12 +683,24 @@ function MainApp() {
       completedAt: new Date().toISOString()
     };
 
+    const updatedOrders = orders.map(o => o.id === orderId ? closedOrder : o);
+    setOrders(updatedOrders);
+    saveOrders(updatedOrders);
+
     if (dbMode === 'supabase' && currentStoreId !== 'local') {
-      await updateOrderSupabase(currentStoreId, closedOrder);
+      if (!navigator.onLine) {
+        queueOrderForSync(closedOrder);
+        return;
+      }
+
+      const success = await updateOrderSupabase(currentStoreId, closedOrder);
+      if (!success) {
+        queueOrderForSync(closedOrder);
+        return;
+      }
       setOrders(await fetchOrders(currentStoreId));
       setSales(await fetchSalesSupabase(currentStoreId));
     } else {
-      const updatedOrders = orders.map(o => o.id === orderId ? closedOrder : o);
       saveOrders(updatedOrders);
       setOrders(updatedOrders);
 
@@ -540,6 +733,25 @@ function MainApp() {
     }
   };
 
+  useEffect(() => {
+    const updateOnlineStatus = () => {
+      setIsOnline(navigator.onLine);
+      setOfflineQueueCount(readOfflineQueue().length);
+      if (navigator.onLine) {
+        syncOfflineQueue();
+      }
+    };
+
+    window.addEventListener('online', updateOnlineStatus);
+    window.addEventListener('offline', updateOnlineStatus);
+    updateOnlineStatus();
+
+    return () => {
+      window.removeEventListener('online', updateOnlineStatus);
+      window.removeEventListener('offline', updateOnlineStatus);
+    };
+  }, [dbMode, currentStoreId]);
+
   const isHexColor = storeInfo.themeColor?.startsWith('#');
   const themeClass = isHexColor ? 'theme-custom' : `theme-${storeInfo.themeColor || 'teal'}`;
 
@@ -559,6 +771,17 @@ function MainApp() {
 
 
       {/* Renderização Condicional de Telas */}
+      {currentRole !== 'login' && (!isOnline || offlineQueueCount > 0) && (
+        <div className={`sync-status-banner ${isOnline ? 'syncing' : 'offline'}`}>
+          <strong>{isOnline ? 'Sincronizando pedidos' : 'Modo offline ativo'}</strong>
+          <span>
+            {offlineQueueCount > 0
+              ? `${offlineQueueCount} alteracao(oes) aguardando internet.`
+              : 'Os pedidos continuam salvos neste aparelho.'}
+          </span>
+        </div>
+      )}
+
       {currentRole === 'login' && (
         <Login 
           employees={employees} 

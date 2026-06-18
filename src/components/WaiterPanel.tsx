@@ -3,10 +3,11 @@ import { MenuItem, Employee, Order, OrderItem, Table, TableStatus } from '../typ
 import { 
   ClipboardList, ShoppingCart, User, LogOut, CheckCircle, 
   Clock, Flame, Plus, Minus, Search, X, UtensilsCrossed, 
-  Calculator, Coins 
+  Calculator, Coins, AlertTriangle
 } from 'lucide-react';
 
 import { StoreInfo } from '../types';
+import { formatEta, getEtaForMenuItem, getSlowOrderItems } from '../operationsAnalytics';
 
 interface WaiterPanelProps {
   waiter: Employee;
@@ -84,6 +85,8 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
 
   const readyItemsCount = readyOrdersForThisWaiter.reduce((sum, order) => sum + order.items.length, 0);
   const readyTablesLabel = readyOrdersForThisWaiter.map(order => `Mesa ${order.tableNumber}`).join(', ');
+  const slowItemsForThisWaiter = getSlowOrderItems(orders, 20)
+    .filter(entry => entry.waiterId === waiter.id || entry.waiterName === waiter.name);
 
   useEffect(() => {
     if (readyItemsCount > previousReadyCountRef.current && previousReadyCountRef.current > 0) {
@@ -170,7 +173,7 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
     }
     
     const updatedItems = activeOrder.items.map(item => (
-      item.status === 'ready' ? { ...item, status: 'delivered' as const } : item
+      item.status === 'ready' ? { ...item, status: 'delivered' as const, deliveredAt: new Date().toISOString() } : item
     ));
 
     onUpdateOrder({
@@ -190,7 +193,7 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
       ...activeOrder,
       items: activeOrder.items.map(item =>
         item.id === itemId && item.status === 'ready'
-          ? { ...item, status: 'delivered' as const }
+          ? { ...item, status: 'delivered' as const, deliveredAt: new Date().toISOString() }
           : item
       )
     });
@@ -203,13 +206,28 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
     onUpdateOrder({
       ...activeOrder,
       items: activeOrder.items.map(item =>
-        item.status === 'ready' ? { ...item, status: 'delivered' as const } : item
+        item.status === 'ready' ? { ...item, status: 'delivered' as const, deliveredAt: new Date().toISOString() } : item
       )
     });
   };
 
   // Funções do Carrinho
+  const getAvailableStock = (item: MenuItem) => (
+    item.trackStock ? Math.max(0, item.stockQuantity ?? 0) : Number.POSITIVE_INFINITY
+  );
+
+  const isOutOfStock = (item: MenuItem) => item.trackStock && getAvailableStock(item) <= 0;
+
   const addToCart = (menuItemId: string) => {
+    const menuItem = menuItems.find(item => item.id === menuItemId);
+    if (!menuItem) return;
+
+    const currentQuantity = cart[menuItemId]?.quantity || 0;
+    if (currentQuantity >= getAvailableStock(menuItem)) {
+      alert(`${menuItem.name} esta sem estoque suficiente no momento.`);
+      return;
+    }
+
     setCart(prev => ({
       ...prev,
       [menuItemId]: {
@@ -255,6 +273,18 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
       alert(`Mesa ${selectedTable} esta em atendimento com ${activeOrder.waiterName}.`);
       return;
     }
+
+    const insufficientStock = cartEntries.find(([itemId, cartItem]) => {
+      const menuItem = menuItems.find(m => m.id === itemId);
+      return menuItem?.trackStock && cartItem.quantity > getAvailableStock(menuItem);
+    });
+
+    if (insufficientStock) {
+      const item = menuItems.find(m => m.id === insufficientStock[0]);
+      alert(`${item?.name || 'Item'} nao tem estoque suficiente para este pedido.`);
+      return;
+    }
+
     const newItems: OrderItem[] = cartEntries.map(([itemId, cartItem]) => {
       const menuItem = menuItems.find(m => m.id === itemId)!;
       return {
@@ -308,7 +338,7 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
   const filteredMenuItems = menuItems.filter(item => {
     const matchesCategory = selectedCategory === 'Todos' || item.category === selectedCategory;
     const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch && item.isAvailable;
+    return matchesCategory && matchesSearch && item.isAvailable && !isOutOfStock(item);
   });
 
   const myActiveOrders = orders.filter(o => o.status === 'active' && isOrderAssignedToWaiter(o));
@@ -350,6 +380,14 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
             <CheckCircle size={18} />
             <strong>{readyItemsCount} item(ns) pronto(s)</strong>
             <span>{readyTablesLabel}. Toque para ver e entregar.</span>
+          </div>
+        )}
+
+        {slowItemsForThisWaiter.length > 0 && (
+          <div className="delay-alert" role="status" onClick={() => setActiveTab('my-orders')}>
+            <AlertTriangle size={18} />
+            <strong>{slowItemsForThisWaiter.length} item(ns) acima de 20 min</strong>
+            <span>Mesa {slowItemsForThisWaiter[0].tableNumber}: {slowItemsForThisWaiter[0].item.name} esta ha {slowItemsForThisWaiter[0].minutes} min sem concluir.</span>
           </div>
         )}
 
@@ -699,6 +737,10 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
                               <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--secondary)' }}>
                                 R$ {(item.isPromotion && item.promotionalPrice ? item.promotionalPrice : item.price).toFixed(2)}
                               </span>
+                              <div className="eta-chip">{formatEta(getEtaForMenuItem(item, orders))}</div>
+                              {item.trackStock && (
+                                <div className="stock-chip">{getAvailableStock(item)} em estoque</div>
+                              )}
                             </div>
                             
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -838,6 +880,14 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
         </div>
       )}
 
+      {slowItemsForThisWaiter.length > 0 && (
+        <div className="delay-alert mobile" role="status" onClick={() => setActiveTab('my-orders')}>
+          <AlertTriangle size={17} />
+          <strong>{slowItemsForThisWaiter.length} demorando</strong>
+          <span>Mesa {slowItemsForThisWaiter[0].tableNumber} ha {slowItemsForThisWaiter[0].minutes} min.</span>
+        </div>
+      )}
+
       {/* Mobile Content */}
       <div className="mobile-content">
         
@@ -963,6 +1013,10 @@ export const WaiterPanel: React.FC<WaiterPanelProps> = ({
                           <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--secondary)' }}>
                             R$ {(item.isPromotion && item.promotionalPrice ? item.promotionalPrice : item.price).toFixed(2)}
                           </span>
+                          <div className="eta-chip">{formatEta(getEtaForMenuItem(item, orders))}</div>
+                          {item.trackStock && (
+                            <div className="stock-chip">{getAvailableStock(item)} em estoque</div>
+                          )}
                         </div>
                         
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

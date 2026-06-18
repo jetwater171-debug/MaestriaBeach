@@ -8,6 +8,8 @@ export interface MenuItem {
   isAvailable: boolean;
   isPromotion: boolean;
   promotionalPrice?: number;
+  trackStock?: boolean;
+  stockQuantity?: number;
 }
 
 export interface Employee {
@@ -40,6 +42,9 @@ export interface OrderItem {
   observations?: string;
   status: OrderItemStatus;
   sentAt: string;
+  preparingAt?: string;
+  readyAt?: string;
+  deliveredAt?: string;
 }
 
 export type OrderStatus = 'active' | 'completed' | 'canceled';

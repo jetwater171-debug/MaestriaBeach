@@ -3,8 +3,14 @@ import { StoreInfo, MenuItem, Employee, DailySale, Order } from '../types';
 import { 
   Store, Utensils, Users, TrendingUp, Plus, Trash2, 
   Save, DollarSign, ShoppingBag, Percent, LogOut, ShieldAlert,
-  Award, BarChart2, Hash, X, Copy, ExternalLink
+  Award, BarChart2, Hash, X, Copy, ExternalLink, Clock, Package, Activity
 } from 'lucide-react';
+import {
+  buildProductOperationStats,
+  getPeakHourStats,
+  getSlowOrderItems,
+  getWaiterOperationStats
+} from '../operationsAnalytics';
 
 interface DashboardOwnerProps {
   storeInfo: StoreInfo;
@@ -126,6 +132,40 @@ export const DashboardOwner: React.FC<DashboardOwnerProps> = ({
       const updated = menuItems.filter(item => item.id !== id);
       onUpdateMenuItems(updated);
     }
+  };
+
+  const handleToggleAvailability = (id: string) => {
+    onUpdateMenuItems(menuItems.map(item => (
+      item.id === id ? { ...item, isAvailable: !item.isAvailable } : item
+    )));
+  };
+
+  const handleStockChange = (id: string, rawValue: string) => {
+    const stockQuantity = Math.max(0, Number(rawValue) || 0);
+    onUpdateMenuItems(menuItems.map(item => (
+      item.id === id
+        ? {
+            ...item,
+            trackStock: true,
+            stockQuantity,
+            isAvailable: stockQuantity > 0
+          }
+        : item
+    )));
+  };
+
+  const handleToggleStockTracking = (id: string) => {
+    onUpdateMenuItems(menuItems.map(item => {
+      if (item.id !== id) return item;
+      const trackStock = !item.trackStock;
+      const stockQuantity = trackStock ? Math.max(0, item.stockQuantity ?? 0) : undefined;
+      return {
+        ...item,
+        trackStock,
+        stockQuantity,
+        isAvailable: trackStock ? (stockQuantity ?? 0) > 0 : item.isAvailable
+      };
+    }));
   };
 
   // Adicionar item
@@ -290,6 +330,15 @@ export const DashboardOwner: React.FC<DashboardOwnerProps> = ({
   };
 
   const waiterLeaderboard = getWaiterPerformance();
+  const productStatsToday = buildProductOperationStats(orders, menuItems, true);
+  const peakHourStats = getPeakHourStats(orders, true);
+  const waiterOperationStats = getWaiterOperationStats(orders, employees);
+  const slowOrderItems = getSlowOrderItems(orders, 20);
+  const maxPeakCount = Math.max(1, ...peakHourStats.map(stat => stat.count));
+  const avgPrepSamples = productStatsToday.filter(stat => stat.avgMinutes !== null);
+  const avgPrepToday = avgPrepSamples.length > 0
+    ? Math.round(avgPrepSamples.reduce((sum, stat) => sum + (stat.avgMinutes || 0), 0) / avgPrepSamples.length)
+    : null;
 
   return (
     <div className="app-container">
@@ -525,6 +574,113 @@ export const DashboardOwner: React.FC<DashboardOwnerProps> = ({
           )}
 
           {/* TAB 2: CARDÁPIO */}
+          {activeTab === 'overview' && (
+            <div className="ops-section">
+              <div className="ops-section-header">
+                <div>
+                  <span className="ops-eyebrow">Inteligencia operacional</span>
+                  <h3>Controle do dia em tempo real</h3>
+                </div>
+                <span className="ops-live-chip">{slowOrderItems.length} alerta(s) de demora</span>
+              </div>
+
+              <div className="ops-insights-grid">
+                <div className="ops-metric-card">
+                  <div className="ops-card-title"><Clock size={16} /> Demora media</div>
+                  <strong>{avgPrepToday ? `${avgPrepToday} min` : 'Sem historico'}</strong>
+                  <span>Media calculada pelos itens finalizados hoje.</span>
+                </div>
+
+                <div className="ops-metric-card">
+                  <div className="ops-card-title"><Activity size={16} /> Horario de pico</div>
+                  <strong>{peakHourStats.length ? peakHourStats.reduce((best, stat) => stat.count > best.count ? stat : best, peakHourStats[0]).label : '--'}</strong>
+                  <span>Entrada de pedidos por faixa de horario.</span>
+                </div>
+
+                <div className="ops-metric-card">
+                  <div className="ops-card-title"><Package size={16} /> Itens em risco</div>
+                  <strong>{menuItems.filter(item => item.trackStock && (item.stockQuantity ?? 0) <= 3).length}</strong>
+                  <span>Produtos com estoque baixo ou zerado.</span>
+                </div>
+              </div>
+
+              <div className="ops-dashboard-grid">
+                <div className="ops-panel">
+                  <h4>Relatorio de horario de pico</h4>
+                  {peakHourStats.length === 0 ? (
+                    <p className="ops-empty">Ainda nao ha pedidos hoje.</p>
+                  ) : (
+                    <div className="ops-bars">
+                      {peakHourStats.map(stat => (
+                        <div key={stat.hour} className="ops-bar-row">
+                          <span>{stat.label}</span>
+                          <div><i style={{ width: `${(stat.count / maxPeakCount) * 100}%` }} /></div>
+                          <strong>{stat.count}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="ops-panel">
+                  <h4>Top 10 produtos vendidos hoje</h4>
+                  {productStatsToday.length === 0 ? (
+                    <p className="ops-empty">O ranking aparece assim que os pedidos entrarem.</p>
+                  ) : (
+                    <div className="ops-list">
+                      {productStatsToday.slice(0, 10).map((stat, index) => (
+                        <div key={stat.menuItemId} className="ops-list-row">
+                          <span>{index + 1}</span>
+                          <div>
+                            <strong>{stat.name}</strong>
+                            <small>{stat.quantity} un. - {stat.avgMinutes ? `${stat.avgMinutes} min medio` : 'sem media ainda'}</small>
+                          </div>
+                          <b>R$ {stat.revenue.toFixed(2)}</b>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="ops-panel">
+                  <h4>Performance por garcom</h4>
+                  <div className="ops-list">
+                    {waiterOperationStats.map(stat => (
+                      <div key={stat.id} className="ops-list-row">
+                        <span>{stat.orders}</span>
+                        <div>
+                          <strong>{stat.name}</strong>
+                          <small>{stat.deliveredItems} itens entregues - {stat.avgDeliveryMinutes ? `${stat.avgDeliveryMinutes} min entrega` : 'sem entregas concluidas'}</small>
+                        </div>
+                        <b>R$ {stat.avgTicket.toFixed(2)}</b>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="ops-panel">
+                  <h4>Alertas de demora</h4>
+                  {slowOrderItems.length === 0 ? (
+                    <p className="ops-empty">Nenhum pedido parado acima de 20 minutos.</p>
+                  ) : (
+                    <div className="ops-list">
+                      {slowOrderItems.slice(0, 8).map(entry => (
+                        <div key={`${entry.orderId}-${entry.item.id}`} className="ops-list-row danger">
+                          <span>{entry.minutes}</span>
+                          <div>
+                            <strong>Mesa {entry.tableNumber} - {entry.item.name}</strong>
+                            <small>{entry.waiterName} - {entry.item.status === 'pending' ? 'pendente' : 'preparando'}</small>
+                          </div>
+                          <b>min</b>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {activeTab === 'menu' && (
             <div>
               <div className="flex-between" style={{ marginBottom: '1.5rem' }}>
@@ -546,6 +702,8 @@ export const DashboardOwner: React.FC<DashboardOwnerProps> = ({
                       <th>Categoria</th>
                       <th>Descrição</th>
                       <th>Preço</th>
+                      <th>Estoque</th>
+                      <th>Status</th>
                       <th style={{ textAlign: 'right' }}>Ações</th>
                     </tr>
                   </thead>
@@ -553,7 +711,7 @@ export const DashboardOwner: React.FC<DashboardOwnerProps> = ({
                     {menuItems.map(item => (
                       <tr key={item.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                         <td style={{ padding: '1rem', fontSize: '1.75rem' }}>{item.imageUrl}</td>
-                        <td style={{ fontWeight: 700 }}>{item.name}</td>
+                        <td style={{ fontWeight: 700, textDecoration: item.isAvailable ? 'none' : 'line-through', color: item.isAvailable ? 'var(--text-main)' : 'var(--text-light)' }}>{item.name}</td>
                         <td>
                           <span className={`badge ${item.category === 'Bebidas' ? 'badge-info' : 'badge-warning'}`}>
                             {item.category}
@@ -563,6 +721,35 @@ export const DashboardOwner: React.FC<DashboardOwnerProps> = ({
                           {item.description || 'Sem descrição.'}
                         </td>
                         <td style={{ fontWeight: 800, color: 'var(--secondary)', fontSize: '1rem' }}>R$ {item.price.toFixed(2)}</td>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <input
+                              type="checkbox"
+                              checked={!!item.trackStock}
+                              onChange={() => handleToggleStockTracking(item.id)}
+                              title="Controlar estoque"
+                            />
+                            <input
+                              type="number"
+                              min="0"
+                              disabled={!item.trackStock}
+                              value={item.stockQuantity ?? 0}
+                              onChange={event => handleStockChange(item.id, event.target.value)}
+                              className="form-control"
+                              style={{ width: '82px', height: '34px', padding: '0 0.5rem', fontSize: '0.8rem' }}
+                            />
+                          </div>
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleAvailability(item.id)}
+                            className={`badge ${item.isAvailable ? 'badge-success' : 'badge-warning'}`}
+                            style={{ border: 0, cursor: 'pointer' }}
+                          >
+                            {item.isAvailable ? 'Disponivel' : 'Acabou'}
+                          </button>
+                        </td>
                         <td style={{ textAlign: 'right' }}>
                           <button 
                             onClick={() => handleDeleteMenuItem(item.id)} 
