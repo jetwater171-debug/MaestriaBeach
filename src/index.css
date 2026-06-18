@@ -3427,3 +3427,398 @@ textarea:focus {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 }
+
+/* Full app mobile UX pass */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .glass-panel:hover,
+  .kitchen-card:hover,
+  .table-card:hover,
+  .btn:hover,
+  .sidebar-item:hover {
+    transform: none !important;
+  }
+}
+
+@media (max-width: 820px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  .app-container,
+  .landing-page,
+  .product-landing,
+  .admin-shell,
+  .admin-login-page {
+    min-height: 100dvh;
+    overflow-x: hidden;
+  }
+
+  .brand-header {
+    position: sticky;
+    top: 0;
+    z-index: 120;
+    min-height: 58px;
+    padding: 0.65rem 0.85rem !important;
+    gap: 0.65rem !important;
+    flex-wrap: wrap;
+    background: rgba(255, 255, 255, 0.94) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    box-shadow: 0 1px 0 rgba(15, 23, 42, 0.08);
+  }
+
+  .brand-logo {
+    min-width: 0;
+    flex: 1 1 auto;
+    font-size: 0.95rem !important;
+  }
+
+  .brand-logo-icon {
+    width: 34px !important;
+    height: 34px !important;
+    min-width: 34px;
+  }
+
+  .brand-logo span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .brand-header > div:last-child {
+    width: 100%;
+    justify-content: space-between;
+    gap: 0.5rem !important;
+    overflow-x: auto;
+    padding-bottom: 0.1rem;
+  }
+
+  .brand-header .btn,
+  .brand-header button {
+    min-height: 40px;
+    white-space: nowrap;
+  }
+
+  .content-area {
+    width: 100%;
+    min-height: calc(100dvh - 58px);
+    padding: 0.85rem !important;
+    overflow-x: hidden;
+  }
+
+  .dashboard-grid {
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: auto !important;
+  }
+
+  .sidebar {
+    position: sticky !important;
+    top: 58px !important;
+    z-index: 90 !important;
+    width: 100% !important;
+    min-height: auto !important;
+    border-right: 0 !important;
+    border-bottom: 1px solid var(--border-color) !important;
+    padding: 0.55rem 0.7rem !important;
+    background: rgba(255, 255, 255, 0.96) !important;
+  }
+
+  .sidebar-menu {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 0.45rem !important;
+    overflow-x: auto !important;
+    scrollbar-width: none;
+    width: 100%;
+  }
+
+  .sidebar-menu::-webkit-scrollbar {
+    display: none;
+  }
+
+  .sidebar-item {
+    min-width: max-content;
+    min-height: 42px;
+    padding: 0.55rem 0.8rem !important;
+    border-radius: 12px !important;
+    border-left: 0 !important;
+    font-size: 0.78rem !important;
+    background: #f8fafc;
+  }
+
+  .sidebar-item.active {
+    background: var(--primary-light) !important;
+    border-bottom: 0 !important;
+    color: var(--primary-dark) !important;
+  }
+
+  .sidebar-footer {
+    display: none !important;
+  }
+
+  .flex-between {
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .glass-panel,
+  .auth-console,
+  .wizard-sidebar,
+  .wizard-workspace,
+  .admin-table-card,
+  .admin-details-card,
+  .admin-metrics article,
+  .admin-edit-modal {
+    border-radius: 14px !important;
+    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.07) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  .btn {
+    min-height: 44px;
+    justify-content: center;
+    border-radius: 12px !important;
+  }
+
+  .cashier-layout,
+  .create-store-page,
+  .login-page-shell,
+  .owner-login-shell,
+  .ai-menu-importer,
+  .admin-metrics,
+  .admin-details-grid,
+  .form-grid,
+  .form-grid.two,
+  .form-grid.three,
+  .staff-route-grid,
+  .owner-feature-list {
+    grid-template-columns: 1fr !important;
+  }
+
+  .content-area [style*="grid-template-columns"],
+  .wizard-workspace [style*="grid-template-columns"],
+  .admin-shell [style*="grid-template-columns"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  .content-area [style*="minmax"],
+  .wizard-workspace [style*="minmax"],
+  .admin-shell [style*="minmax"] {
+    min-width: 0 !important;
+  }
+
+  .create-store-page {
+    gap: 0.85rem !important;
+  }
+
+  .wizard-sidebar {
+    position: static !important;
+    padding: 1rem !important;
+  }
+
+  .wizard-sidebar h1,
+  .login-visual-panel h1 {
+    font-size: clamp(2rem, 10vw, 3rem) !important;
+  }
+
+  .wizard-steps {
+    display: flex !important;
+    overflow-x: auto;
+    gap: 0.5rem !important;
+    scrollbar-width: none;
+    padding-bottom: 0.15rem;
+  }
+
+  .wizard-steps::-webkit-scrollbar {
+    display: none;
+  }
+
+  .wizard-steps button {
+    min-width: 190px;
+  }
+
+  .wizard-workspace {
+    padding: 1rem !important;
+  }
+
+  .setup-row,
+  .menu-setup .setup-row {
+    grid-template-columns: 1fr !important;
+    gap: 0.55rem !important;
+    align-items: stretch !important;
+  }
+
+  .setup-row button {
+    width: 100%;
+    min-height: 42px;
+  }
+
+  .menu-setup .setup-row input,
+  .menu-setup .setup-row select,
+  .setup-row input,
+  .setup-row select {
+    width: 100% !important;
+  }
+
+  .photo-dropzone,
+  .photo-dropzone span,
+  .photo-dropzone img {
+    min-height: 170px !important;
+  }
+
+  .register-actions,
+  .wizard-actions,
+  .modal-footer,
+  .admin-actions {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    width: 100%;
+  }
+
+  .modal-overlay {
+    padding: 0.65rem !important;
+    align-items: flex-end !important;
+  }
+
+  .modal-content,
+  .admin-edit-modal {
+    width: 100% !important;
+    max-width: none !important;
+    max-height: 90dvh !important;
+    border-radius: 18px 18px 0 0 !important;
+    overflow: hidden;
+  }
+
+  .modal-body {
+    max-height: calc(90dvh - 126px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .admin-shell {
+    padding: 0.85rem !important;
+  }
+
+  .admin-topbar,
+  .admin-table-header {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 0.75rem !important;
+  }
+
+  .admin-table {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .admin-table-row,
+  .admin-table-row.head {
+    min-width: 720px;
+  }
+
+  .admin-table-row.head {
+    display: grid !important;
+  }
+
+  .kitchen-orders-container {
+    grid-template-columns: 1fr !important;
+  }
+
+  .kitchen-card-header,
+  .kitchen-item {
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .kitchen-card-body {
+    padding: 0.85rem !important;
+  }
+
+  .cashier-layout > aside,
+  .cashier-layout > div,
+  .cashier-layout section {
+    min-width: 0;
+  }
+
+  .landing-footer {
+    padding: 2rem 1rem !important;
+  }
+}
+
+@media (max-width: 520px) {
+  .content-area h1,
+  .content-area h2,
+  .admin-topbar h1 {
+    font-size: clamp(1.45rem, 8vw, 2rem) !important;
+    line-height: 1.05 !important;
+  }
+
+  .content-area h3 {
+    line-height: 1.15;
+  }
+
+  .million-hero {
+    width: calc(100% - 22px) !important;
+  }
+
+  .million-proof-row span,
+  .million-value-strip article,
+  .million-story-grid div {
+    padding: 15px !important;
+  }
+
+  .ops-device {
+    box-shadow: 0 18px 36px rgba(15, 23, 42, 0.12) !important;
+  }
+
+  .floating-ticket {
+    display: none;
+  }
+
+  .tables-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  .table-card {
+    min-height: 78px !important;
+  }
+
+  .mobile-nav-btn span {
+    font-size: 0.68rem;
+  }
+}
+
+@media (max-width: 360px) {
+  .tables-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .brand-header > div:last-child {
+    justify-content: flex-start;
+  }
+}
