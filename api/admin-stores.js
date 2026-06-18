@@ -73,7 +73,14 @@ const normalizeStore = (store, employeesData = [], menuData = [], ordersData = [
     activeOrdersCount: storeOrders.filter(order => order.status === 'active').length,
     completedOrdersCount: completedOrders.length,
     totalRevenue: completedOrders.reduce((sum, order) => sum + Number(order.total || 0), 0),
-    invitePending: String(store.owner_password || '').startsWith('invite:')
+    invitePending: String(store.owner_password || '').startsWith('invite:'),
+    subscriptionStatus: store.subscription_status,
+    planName: store.plan_name,
+    monthlyFee: store.monthly_fee !== undefined && store.monthly_fee !== null ? Number(store.monthly_fee) : undefined,
+    subscriptionDueDate: store.subscription_due_date,
+    amountPaid: store.amount_paid !== undefined && store.amount_paid !== null ? Number(store.amount_paid) : undefined,
+    lastPaymentAt: store.last_payment_at,
+    adminIncident: store.admin_incident
   };
 };
 
@@ -174,6 +181,28 @@ const updateStore = async (supabase, storeId, body) => {
     .eq('id', storeId);
 
   if (error) throw error;
+
+  const billingPayload = {
+    subscription_status: body.subscriptionStatus,
+    plan_name: body.planName,
+    monthly_fee: body.monthlyFee,
+    subscription_due_date: body.subscriptionDueDate,
+    amount_paid: body.amountPaid,
+    last_payment_at: body.lastPaymentAt,
+    admin_incident: body.adminIncident
+  };
+
+  const hasBillingPayload = Object.values(billingPayload).some(value => value !== undefined);
+  if (!hasBillingPayload) return;
+
+  const { error: billingError } = await supabase
+    .from('stores')
+    .update(billingPayload)
+    .eq('id', storeId);
+
+  if (billingError) {
+    console.warn('Campos de assinatura ainda nao existem no banco. Mantendo dados no painel local:', billingError.message);
+  }
 };
 
 const deleteStore = async (supabase, storeId) => {

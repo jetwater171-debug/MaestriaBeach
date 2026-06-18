@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Activity,
+  AlertTriangle,
   ArrowLeft,
   BarChart3,
   Building2,
@@ -12,6 +13,7 @@ import {
   Eye,
   KeyRound,
   Link2,
+  ReceiptText,
   RefreshCw,
   Save,
   Search,
@@ -30,6 +32,20 @@ type AdminStoreDetails = {
   menuItems: Array<{ id: string; name: string; category: string; price: number; is_available?: boolean }>;
   orders: Array<{ id: string; table_number: number; status: string; total: number; created_at: string; order_items?: unknown[] }>;
 };
+
+type BillingStatus = NonNullable<AdminStoreSummary['subscriptionStatus']>;
+
+type BillingRecord = {
+  planName: string;
+  monthlyFee: number;
+  subscriptionStatus: BillingStatus;
+  subscriptionDueDate: string;
+  amountPaid: number;
+  lastPaymentAt?: string;
+  adminIncident?: string;
+};
+
+const BILLING_STORAGE_KEY = 'mb_admin_billing_records';
 
 const buildLocalAdminStore = (): AdminStoreSummary => {
   const store = getStoreInfo();
@@ -53,6 +69,17 @@ const buildLocalAdminStore = (): AdminStoreSummary => {
 
 const currency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
+
+const dateInputValue = (date?: string) => {
+  if (!date) return '';
+  return new Date(date).toISOString().slice(0, 10);
+};
+
+const addDays = (date: Date, days: number) => {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+};
 
 const formatDateTime = (date?: string) => {
   if (!date) return 'Sem data';
@@ -86,6 +113,48 @@ const adminRequest = async <T,>(
   return data as T;
 };
 
+const readBillingRecords = (): Record<string, BillingRecord> => {
+  try {
+    return JSON.parse(localStorage.getItem(BILLING_STORAGE_KEY) || '{}');
+  } catch {
+    return {};
+  }
+};
+
+const writeBillingRecords = (records: Record<string, BillingRecord>) => {
+  localStorage.setItem(BILLING_STORAGE_KEY, JSON.stringify(records));
+};
+
+const defaultBillingForStore = (store: AdminStoreSummary): BillingRecord => {
+  const createdAt = store.createdAt ? new Date(store.createdAt) : new Date();
+  return {
+    planName: store.invitePending ? 'Convite' : 'Profissional',
+    monthlyFee: store.invitePending ? 0 : 197,
+    subscriptionStatus: store.invitePending ? 'trial' : 'active',
+    subscriptionDueDate: addDays(createdAt, 30).toISOString(),
+    amountPaid: 0,
+    lastPaymentAt: undefined,
+    adminIncident: ''
+  };
+};
+
+const daysUntil = (date?: string) => {
+  if (!date) return 999;
+  const due = new Date(date);
+  const now = new Date();
+  due.setHours(0, 0, 0, 0);
+  now.setHours(0, 0, 0, 0);
+  return Math.ceil((due.getTime() - now.getTime()) / 86400000);
+};
+
+const statusLabel: Record<BillingStatus, string> = {
+  trial: 'Teste',
+  active: 'Ativo',
+  overdue: 'Vencido',
+  paused: 'Pausado',
+  canceled: 'Cancelado'
+};
+
 export const AdminPanel: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(() => sessionStorage.getItem('mb_admin_auth') === 'true');
   const [password, setPassword] = useState(() => sessionStorage.getItem('mb_admin_password') || '');
@@ -98,6 +167,7 @@ export const AdminPanel: React.FC = () => {
   const [inviteClientName, setInviteClientName] = useState('');
   const [invitePhone, setInvitePhone] = useState('');
   const [generatedInviteUrl, setGeneratedInviteUrl] = useState('');
+  const [billingRecords, setBillingRecords] = useState<Record<string, BillingRecord>>(() => readBillingRecords());
 
   const loadStores = useCallback(async () => {
     setLoading(true);
@@ -123,17 +193,29 @@ export const AdminPanel: React.FC = () => {
 
   const filteredStores = useMemo(() => {
     const term = search.trim().toLowerCase();
-    if (!term) return stores;
+    const enriched = stores.map(store => ({
+      ...store,
+      ...(billingRecords[store.id] || defaultBillingForStore(store))
+    }));
 
-    return stores.filter(store =>
-      [store.name, store.tenantCode, store.ownerEmail, store.address]
+    if (!term) return enriched;
+
+    return enriched.filter(store =>
+      [store.name, store.tenantCode, store.ownerEmail, store.address, store.planName, store.subscriptionStatus]
         .filter(Boolean)
         .some(value => String(value).toLowerCase().includes(term))
     );
-  }, [stores, search]);
+  }, [stores, search, billingRecords]);
+
+  const enrichedStores = useMemo(() => {
+    return stores.map(store => ({
+      ...store,
+      ...(billingRecords[store.id] || defaultBillingForStore(store))
+    }));
+  }, [stores, billingRecords]);
 
   const totals = useMemo(() => {
-    return stores.reduce(
+    return enrichedStores.reduce(
       (acc, store) => ({
         stores: acc.stores + 1,
         employees: acc.employees + store.employeesCount,
@@ -141,27 +223,54 @@ export const AdminPanel: React.FC = () => {
         activeOrders: acc.activeOrders + store.activeOrdersCount,
         completedOrders: acc.completedOrders + store.completedOrdersCount,
         pendingInvites: acc.pendingInvites + (store.invitePending ? 1 : 0),
+        mrr: acc.mrr + (store.subscriptionStatus === 'active' ? Number(store.monthlyFee || 0) : 0),
+        overdue: acc.overdue + (store.subscriptionStatus === 'overdue' || daysUntil(store.subscriptionDueDate) < 0 ? 1 : 0),
+        dueSoon: acc.dueSoon + (daysUntil(store.subscriptionDueDate) >= 0 && daysUntil(store.subscriptionDueDate) <= 7 ? 1 : 0),
+        paidToUs: acc.paidToUs + Number(store.amountPaid || 0),
         revenue: acc.revenue + store.totalRevenue
       }),
-      { stores: 0, employees: 0, menuItems: 0, activeOrders: 0, completedOrders: 0, pendingInvites: 0, revenue: 0 }
+      {
+        stores: 0,
+        employees: 0,
+        menuItems: 0,
+        activeOrders: 0,
+        completedOrders: 0,
+        pendingInvites: 0,
+        mrr: 0,
+        overdue: 0,
+        dueSoon: 0,
+        paidToUs: 0,
+        revenue: 0
+      }
     );
-  }, [stores]);
+  }, [enrichedStores]);
 
   const storeRankings = useMemo(() => {
-    const withOrderCount = stores.map(store => ({
+    const withOrderCount = enrichedStores.map(store => ({
       ...store,
       totalOrdersCount: store.activeOrdersCount + store.completedOrdersCount
     }));
 
     return {
       byOrders: [...withOrderCount].sort((a, b) => b.totalOrdersCount - a.totalOrdersCount).slice(0, 5),
-      byRevenue: [...withOrderCount].sort((a, b) => b.totalRevenue - a.totalRevenue).slice(0, 5),
+      byRevenue: [...withOrderCount].sort((a, b) => Number(b.amountPaid || 0) - Number(a.amountPaid || 0)).slice(0, 5),
       needsAttention: withOrderCount
-        .filter(store => store.invitePending || store.activeOrdersCount > 0 || store.employeesCount === 0 || store.menuItemsCount === 0)
-        .sort((a, b) => Number(b.invitePending) - Number(a.invitePending) || b.activeOrdersCount - a.activeOrdersCount)
+        .filter(store =>
+          store.invitePending ||
+          store.subscriptionStatus === 'overdue' ||
+          daysUntil(store.subscriptionDueDate) < 0 ||
+          Boolean(store.adminIncident) ||
+          store.employeesCount === 0 ||
+          store.menuItemsCount === 0
+        )
+        .sort((a, b) =>
+          Number(b.subscriptionStatus === 'overdue') - Number(a.subscriptionStatus === 'overdue') ||
+          Number(Boolean(b.adminIncident)) - Number(Boolean(a.adminIncident)) ||
+          Number(b.invitePending) - Number(a.invitePending)
+        )
         .slice(0, 5)
     };
-  }, [stores]);
+  }, [enrichedStores]);
 
   const selectedDetailsStats = useMemo(() => {
     if (!selectedDetails) return null;
@@ -206,7 +315,7 @@ export const AdminPanel: React.FC = () => {
     event.preventDefault();
     if (!selectedStore) return;
 
-    const payload: StoreInfo & { ownerEmail?: string } = {
+    const payload: StoreInfo & Partial<AdminStoreSummary> = {
       name: selectedStore.name,
       logoUrl: selectedStore.logoUrl,
       address: selectedStore.address,
@@ -216,11 +325,33 @@ export const AdminPanel: React.FC = () => {
       tenantCode: selectedStore.tenantCode,
       themeColor: selectedStore.themeColor,
       categories: selectedStore.categories,
-      ownerEmail: selectedStore.ownerEmail
+      ownerEmail: selectedStore.ownerEmail,
+      planName: selectedStore.planName,
+      monthlyFee: selectedStore.monthlyFee,
+      subscriptionStatus: selectedStore.subscriptionStatus,
+      subscriptionDueDate: selectedStore.subscriptionDueDate,
+      amountPaid: selectedStore.amountPaid,
+      lastPaymentAt: selectedStore.lastPaymentAt,
+      adminIncident: selectedStore.adminIncident
     };
 
     setLoading(true);
     try {
+      const nextBillingRecords = {
+        ...billingRecords,
+        [selectedStore.id]: {
+          planName: selectedStore.planName || 'Profissional',
+          monthlyFee: Number(selectedStore.monthlyFee || 0),
+          subscriptionStatus: selectedStore.subscriptionStatus || 'active',
+          subscriptionDueDate: selectedStore.subscriptionDueDate || addDays(new Date(), 30).toISOString(),
+          amountPaid: Number(selectedStore.amountPaid || 0),
+          lastPaymentAt: selectedStore.lastPaymentAt,
+          adminIncident: selectedStore.adminIncident || ''
+        }
+      };
+      writeBillingRecords(nextBillingRecords);
+      setBillingRecords(nextBillingRecords);
+
       if (selectedStore.id === 'local') {
         saveStoreInfo(payload);
       } else {
@@ -256,6 +387,10 @@ export const AdminPanel: React.FC = () => {
       }
       setSelectedStore(null);
       setSelectedDetails(null);
+      const nextBillingRecords = { ...billingRecords };
+      delete nextBillingRecords[store.id];
+      writeBillingRecords(nextBillingRecords);
+      setBillingRecords(nextBillingRecords);
       await loadStores();
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Nao foi possivel excluir a barraca.');
@@ -293,7 +428,13 @@ export const AdminPanel: React.FC = () => {
           `/api/admin-stores?id=${encodeURIComponent(store.id)}`,
           password
         );
-        setSelectedDetails(details);
+        setSelectedDetails({
+          ...details,
+          store: {
+            ...details.store,
+            ...(billingRecords[details.store.id] || defaultBillingForStore(details.store))
+          }
+        });
       }
     } catch (detailsError) {
       setError(detailsError instanceof Error ? detailsError.message : 'Nao foi possivel carregar detalhes.');
@@ -409,33 +550,33 @@ export const AdminPanel: React.FC = () => {
       <section className="admin-metrics">
         <article>
           <Building2 size={20} />
-          <span>Barracas</span>
+          <span>Assinantes</span>
           <strong>{totals.stores}</strong>
           <small>{totals.pendingInvites} convite(s) pendente(s)</small>
         </article>
         <article>
-          <ClipboardList size={20} />
-          <span>Pedidos totais</span>
-          <strong>{totals.completedOrders + totals.activeOrders}</strong>
-          <small>{totals.activeOrders} ativo(s) agora</small>
+          <ReceiptText size={20} />
+          <span>MRR previsto</span>
+          <strong>{currency(totals.mrr)}</strong>
+          <small>mensalidades ativas</small>
         </article>
         <article>
-          <Users size={20} />
-          <span>Equipe cadastrada</span>
-          <strong>{totals.employees}</strong>
-          <small>{totals.menuItems} itens nos cardapios</small>
+          <AlertTriangle size={20} />
+          <span>Vencidos</span>
+          <strong>{totals.overdue}</strong>
+          <small>{totals.dueSoon} vencendo em 7 dias</small>
         </article>
         <article>
           <Activity size={20} />
-          <span>Barracas operando</span>
+          <span>Operando</span>
           <strong>{stores.filter(store => !store.invitePending).length}</strong>
           <small>{stores.filter(store => store.activeOrdersCount > 0).length} com pedidos ativos</small>
         </article>
         <article>
           <BarChart3 size={20} />
-          <span>Receita fechada</span>
-          <strong>{currency(totals.revenue)}</strong>
-          <small>{totals.completedOrders} pedido(s) fechado(s)</small>
+          <span>Recebido por voce</span>
+          <strong>{currency(totals.paidToUs)}</strong>
+          <small>controle comercial interno</small>
         </article>
       </section>
 
@@ -461,8 +602,8 @@ export const AdminPanel: React.FC = () => {
 
         <article className="admin-rank-panel">
           <div className="admin-panel-heading">
-            <span><BarChart3 size={16} /> Maior receita</span>
-            <small>Barracas com mais faturamento fechado</small>
+            <span><BarChart3 size={16} /> Mais pagaram</span>
+            <small>Receita do Maestria, nao da barraca</small>
           </div>
           <div className="admin-ranking-list compact">
             {storeRankings.byRevenue.map((store, index) => (
@@ -470,9 +611,9 @@ export const AdminPanel: React.FC = () => {
                 <b>{index + 1}</b>
                 <span>
                   <strong>{store.name}</strong>
-                  <small>{store.completedOrdersCount} pedidos fechados</small>
+                  <small>{store.planName} - {statusLabel[(store.subscriptionStatus || 'trial') as BillingStatus]}</small>
                 </span>
-                <em>{currency(store.totalRevenue)}</em>
+                <em>{currency(Number(store.amountPaid || 0))}</em>
               </button>
             ))}
           </div>
@@ -480,8 +621,8 @@ export const AdminPanel: React.FC = () => {
 
         <article className="admin-rank-panel attention">
           <div className="admin-panel-heading">
-            <span><ShieldCheck size={16} /> Precisa atencao</span>
-            <small>Convites, cardapio vazio ou operacao ativa</small>
+            <span><ShieldCheck size={16} /> Risco e erros</span>
+            <small>Vencidos, incidentes ou setup incompleto</small>
           </div>
           <div className="admin-ranking-list compact">
             {storeRankings.needsAttention.length === 0 ? (
@@ -491,9 +632,11 @@ export const AdminPanel: React.FC = () => {
                 <b>{store.invitePending ? '!' : store.activeOrdersCount}</b>
                 <span>
                   <strong>{store.name}</strong>
-                  <small>{store.invitePending ? 'Convite ainda nao ativado' : `${store.activeOrdersCount} pedidos ativos`}</small>
+                  <small>
+                    {store.adminIncident || (daysUntil(store.subscriptionDueDate) < 0 ? 'Assinatura vencida' : store.invitePending ? 'Convite ainda nao ativado' : 'Setup incompleto')}
+                  </small>
                 </span>
-                <em>{store.menuItemsCount} itens</em>
+                <em>{statusLabel[(store.subscriptionStatus || 'trial') as BillingStatus]}</em>
               </button>
             ))}
           </div>
@@ -554,10 +697,10 @@ export const AdminPanel: React.FC = () => {
         <div className="admin-table">
           <div className="admin-table-row head">
             <span>Barraca</span>
-            <span>Codigo</span>
-            <span>Dono</span>
-            <span>Pedidos</span>
-            <span>Receita</span>
+            <span>Assinatura</span>
+            <span>Vencimento</span>
+            <span>Uso</span>
+            <span>Pago a voce</span>
             <span>Acoes</span>
           </div>
           {filteredStores.map(store => (
@@ -570,20 +713,22 @@ export const AdminPanel: React.FC = () => {
                 </span>
               </span>
               <span>
-                <strong>{store.tenantCode || '-'}</strong>
-                <small>{store.tablesCount} mesa(s)</small>
+                <strong>{store.planName || 'Sem plano'}</strong>
+                <small className={`billing-status ${(store.subscriptionStatus || 'trial')}`}>
+                  {statusLabel[(store.subscriptionStatus || 'trial') as BillingStatus]} - {currency(Number(store.monthlyFee || 0))}/mes
+                </small>
               </span>
               <span>
-                <strong>{store.ownerEmail || '-'}</strong>
-                <small>{store.phone || 'sem telefone'}</small>
+                <strong>{store.subscriptionDueDate ? new Date(store.subscriptionDueDate).toLocaleDateString('pt-BR') : '-'}</strong>
+                <small>{daysUntil(store.subscriptionDueDate) < 0 ? `${Math.abs(daysUntil(store.subscriptionDueDate))} dia(s) atrasado` : `${daysUntil(store.subscriptionDueDate)} dia(s) restantes`}</small>
               </span>
               <span className="admin-order-pill">
                 <strong>{store.completedOrdersCount + store.activeOrdersCount}</strong>
-                <small>{store.activeOrdersCount} ativos - {store.completedOrdersCount} fechados</small>
+                <small>{store.activeOrdersCount} ativos - {store.menuItemsCount} itens</small>
               </span>
               <span>
-                <strong>{currency(store.totalRevenue)}</strong>
-                <small>{store.employeesCount} equipe - {store.menuItemsCount} itens</small>
+                <strong>{currency(Number(store.amountPaid || 0))}</strong>
+                <small>{store.lastPaymentAt ? `ultimo ${new Date(store.lastPaymentAt).toLocaleDateString('pt-BR')}` : 'sem pagamento registrado'}</small>
               </span>
               <span className="row-actions">
                 <button className="icon-button" onClick={() => loadStoreDetails(store)} title="Ver detalhes">
@@ -626,27 +771,42 @@ export const AdminPanel: React.FC = () => {
                 <strong>{selectedDetailsStats.active}</strong>
               </article>
               <article>
-                <ShieldCheck size={17} />
-                <span>Pedidos fechados</span>
-                <strong>{selectedDetailsStats.completed}</strong>
+                <ReceiptText size={17} />
+                <span>Mensalidade</span>
+                <strong>{currency(Number(selectedDetails.store.monthlyFee || 0))}</strong>
               </article>
               <article>
                 <BarChart3 size={17} />
-                <span>Receita</span>
-                <strong>{currency(selectedDetailsStats.revenue)}</strong>
+                <span>Total pago</span>
+                <strong>{currency(Number(selectedDetails.store.amountPaid || 0))}</strong>
               </article>
               <article>
-                <Activity size={17} />
-                <span>Ticket medio</span>
-                <strong>{currency(selectedDetailsStats.averageTicket)}</strong>
+                <AlertTriangle size={17} />
+                <span>Status SaaS</span>
+                <strong>{statusLabel[(selectedDetails.store.subscriptionStatus || 'trial') as BillingStatus]}</strong>
               </article>
               <article>
                 <CalendarDays size={17} />
-                <span>Ultimo pedido</span>
-                <strong>{formatDateTime(selectedDetailsStats.lastOrder)}</strong>
+                <span>Vencimento</span>
+                <strong>{selectedDetails.store.subscriptionDueDate ? new Date(selectedDetails.store.subscriptionDueDate).toLocaleDateString('pt-BR') : 'Sem data'}</strong>
               </article>
             </div>
           )}
+
+          <div className="admin-health-strip">
+            <span>
+              <strong>Saude operacional</strong>
+              {selectedDetails.store.adminIncident || 'Nenhum erro manual registrado para esta barraca.'}
+            </span>
+            <span>
+              <strong>Uso da barraca</strong>
+              {selectedDetailsStats?.completed || 0} pedidos fechados - ticket medio {currency(selectedDetailsStats?.averageTicket || 0)}
+            </span>
+            <span>
+              <strong>Ultimo pedido</strong>
+              {formatDateTime(selectedDetailsStats?.lastOrder)}
+            </span>
+          </div>
 
           <div className="admin-details-grid">
             <article>
@@ -748,6 +908,82 @@ export const AdminPanel: React.FC = () => {
                   <option value="gold">Dourado</option>
                   <option value="emerald">Esmeralda</option>
                 </select>
+              </label>
+            </div>
+
+            <div className="admin-billing-editor">
+              <h3>Assinatura do cliente</h3>
+              <div className="form-grid three">
+                <label>
+                  Plano
+                  <input
+                    value={selectedStore.planName || ''}
+                    onChange={event => setSelectedStore({ ...selectedStore, planName: event.target.value })}
+                    placeholder="Profissional"
+                  />
+                </label>
+                <label>
+                  Mensalidade (R$)
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={selectedStore.monthlyFee ?? 0}
+                    onChange={event => setSelectedStore({ ...selectedStore, monthlyFee: Number(event.target.value) })}
+                  />
+                </label>
+                <label>
+                  Status
+                  <select
+                    value={selectedStore.subscriptionStatus || 'trial'}
+                    onChange={event => setSelectedStore({ ...selectedStore, subscriptionStatus: event.target.value as BillingStatus })}
+                  >
+                    <option value="trial">Teste</option>
+                    <option value="active">Ativo</option>
+                    <option value="overdue">Vencido</option>
+                    <option value="paused">Pausado</option>
+                    <option value="canceled">Cancelado</option>
+                  </select>
+                </label>
+              </div>
+
+              <div className="form-grid three">
+                <label>
+                  Vencimento
+                  <input
+                    type="date"
+                    value={dateInputValue(selectedStore.subscriptionDueDate)}
+                    onChange={event => setSelectedStore({ ...selectedStore, subscriptionDueDate: new Date(`${event.target.value}T12:00:00`).toISOString() })}
+                  />
+                </label>
+                <label>
+                  Total ja pago (R$)
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={selectedStore.amountPaid ?? 0}
+                    onChange={event => setSelectedStore({ ...selectedStore, amountPaid: Number(event.target.value) })}
+                  />
+                </label>
+                <label>
+                  Ultimo pagamento
+                  <input
+                    type="date"
+                    value={dateInputValue(selectedStore.lastPaymentAt)}
+                    onChange={event => setSelectedStore({ ...selectedStore, lastPaymentAt: new Date(`${event.target.value}T12:00:00`).toISOString() })}
+                  />
+                </label>
+              </div>
+
+              <label>
+                Erro/incidente desta barraca
+                <textarea
+                  value={selectedStore.adminIncident || ''}
+                  onChange={event => setSelectedStore({ ...selectedStore, adminIncident: event.target.value })}
+                  placeholder="Ex: dono relatou falha no Wi-Fi, cardapio incompleto, pagamento em atraso..."
+                  rows={3}
+                />
               </label>
             </div>
 

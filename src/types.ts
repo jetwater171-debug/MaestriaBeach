@@ -95,4 +95,11 @@ export interface AdminStoreSummary extends StoreInfo {
   completedOrdersCount: number;
   totalRevenue: number;
   invitePending?: boolean;
+  subscriptionStatus?: 'trial' | 'active' | 'overdue' | 'paused' | 'canceled';
+  planName?: string;
+  monthlyFee?: number;
+  subscriptionDueDate?: string;
+  amountPaid?: number;
+  lastPaymentAt?: string;
+  adminIncident?: string;
 }

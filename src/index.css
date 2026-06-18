@@ -4475,6 +4475,34 @@ textarea {
   color: var(--primary-dark);
 }
 
+.billing-status {
+  width: fit-content;
+  padding: 0.18rem 0.45rem;
+  border-radius: 999px;
+  font-weight: 900 !important;
+}
+
+.billing-status.active {
+  background: #dcfce7;
+  color: #166534 !important;
+}
+
+.billing-status.trial {
+  background: #e0f2fe;
+  color: #075985 !important;
+}
+
+.billing-status.overdue,
+.billing-status.canceled {
+  background: #fee2e2;
+  color: #991b1b !important;
+}
+
+.billing-status.paused {
+  background: #fef3c7;
+  color: #92400e !important;
+}
+
 .row-actions {
   justify-content: flex-end;
 }
@@ -4510,6 +4538,53 @@ textarea {
   margin-top: 0.15rem;
   color: var(--text-main);
   font-size: 1rem;
+}
+
+.admin-health-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.admin-health-strip span {
+  display: block;
+  padding: 0.85rem;
+  border-radius: 14px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #9a3412;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.admin-health-strip strong {
+  display: block;
+  margin-bottom: 0.2rem;
+  color: #7c2d12;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+}
+
+.admin-billing-editor {
+  padding: 1rem;
+  border: 1px solid rgba(15, 106, 128, 0.12);
+  border-radius: 16px;
+  background: #f8fafc;
+}
+
+.admin-billing-editor h3 {
+  margin: 0 0 0.85rem;
+  font-size: 1rem;
+}
+
+.admin-edit-modal textarea {
+  min-height: 92px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: white;
+  resize: vertical;
 }
 
 /* Mobile-first polish for invite store creation */
@@ -4669,6 +4744,7 @@ textarea {
 
 @media (max-width: 980px) {
   .admin-command-grid,
+  .admin-health-strip,
   .admin-detail-metrics {
     grid-template-columns: 1fr !important;
   }
